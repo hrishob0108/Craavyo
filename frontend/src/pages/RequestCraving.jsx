@@ -217,14 +217,7 @@ const RequestCraving = () => {
 
           {/* What do you want? */}
           <div className="mb-6">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif">What do you want? *</label>
-              {errors.dishName && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.dishName}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2">What do you want? *</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -264,14 +257,7 @@ const RequestCraving = () => {
           {/* Servings, Budget, Preferred time */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Servings (Min 1) *</label>
-                {errors.servings && (
-                  <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                    ⚠ {errors.servings}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Servings (Min 1) *</label>
               <div className="relative">
                 <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <input 
@@ -301,19 +287,12 @@ const RequestCraving = () => {
               )}
             </div>
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Budget (Min ₹20) *</label>
-                {errors.budget && (
-                  <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                    ⚠ {errors.budget}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Budget (Min ₹20) *</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 text-[15px] font-semibold">₹</span>
                 <input 
                   type="number" 
-                  placeholder="Min 20"
+                  placeholder="Min 20" 
                   min="20"
                   onKeyDown={(e) => {
                     if (e.key === '-' || e.key === 'e' || e.key === '+') {
@@ -338,14 +317,7 @@ const RequestCraving = () => {
               )}
             </div>
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Preferred time *</label>
-                {errors.neededBy && (
-                  <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                    ⚠ {errors.neededBy}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Preferred time *</label>
               <div className="relative">
                 <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <select 
@@ -389,14 +361,7 @@ const RequestCraving = () => {
           
           {/* Pickup Location */}
           <div className="mb-8">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif">Pickup Location *</label>
-              {errors.deliveryLocation && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.deliveryLocation}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2">Pickup Location *</label>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
               <input 

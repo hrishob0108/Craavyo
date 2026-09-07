@@ -229,14 +229,7 @@ const PostDish = () => {
 
           {/* Meal Title */}
           <div className="mb-6">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif">Meal Title *</label>
-              {errors.title && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.title}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2">Meal Title *</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -264,14 +257,7 @@ const PostDish = () => {
 
           {/* Description */}
           <div className="mb-8">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif">Description *</label>
-              {errors.description && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.description}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2">Description *</label>
             <textarea 
               placeholder="Cooked freshly this morning, ghee thadka, served with care (min 5 chars)"
               className={`w-full bg-transparent border rounded-lg py-3 px-4 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors h-[80px] resize-none ${
@@ -333,16 +319,9 @@ const PostDish = () => {
 
           {/* Price */}
           <div className="mb-8">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif flex items-center gap-1.5">
-                Price (Min ₹20) *
-              </label>
-              {errors.price && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.price}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2 flex items-center gap-1.5">
+              Price (Min ₹20) *
+            </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 font-semibold">₹</span>
               <input 
@@ -375,14 +354,7 @@ const PostDish = () => {
           {/* Servings, Ready, Pickup */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Servings (Min 1) *</label>
-                {errors.servings && (
-                  <span className="text-red-200 text-[11px] font-semibold bg-red-900/60 px-2 py-0.5 rounded border border-red-400/50">
-                    ⚠ {errors.servings}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Servings (Min 1) *</label>
               <div className="relative">
                 <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <input 
@@ -412,14 +384,7 @@ const PostDish = () => {
               )}
             </div>
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Ready by *</label>
-                {errors.readyBy && (
-                  <span className="text-red-200 text-[11px] font-semibold bg-red-900/60 px-2 py-0.5 rounded border border-red-400/50">
-                    ⚠ {errors.readyBy}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Ready by *</label>
               <div className="relative">
                 <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4 pointer-events-none" />
                 <select 
@@ -450,14 +415,7 @@ const PostDish = () => {
               )}
             </div>
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Pickup point *</label>
-                {errors.pickupPoint && (
-                  <span className="text-red-200 text-[11px] font-semibold bg-red-900/60 px-2 py-0.5 rounded border border-red-400/50">
-                    ⚠ {errors.pickupPoint}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Pickup point *</label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <input 
@@ -484,16 +442,9 @@ const PostDish = () => {
 
           {/* Photo Upload */}
           <div className="mb-10">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif flex items-center gap-1.5">
-                <Camera className="w-4 h-4" /> Add a photo of your meal *
-              </label>
-              {errors.image && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.image}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2 flex items-center gap-1.5">
+              <Camera className="w-4 h-4" /> Add a photo of your meal *
+            </label>
             {errors.image && (
               <p className="text-red-200 text-xs font-semibold mb-2 ml-1 text-left flex items-center gap-1">
                 ⚠ {errors.image}

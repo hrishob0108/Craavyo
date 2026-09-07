@@ -1281,14 +1281,7 @@ const PostDishModal = ({ isOpen, onClose, form, setForm, errors, setErrors, onSu
         </div>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <div className="flex justify-between items-baseline">
-              <label className="text-xs font-bold text-[#5D3234]">Dish Name (Min 3 chars) *</label>
-              {errors?.title && (
-                <span className="text-red-700 text-[11px] font-semibold bg-red-100 px-2 py-0.5 rounded-md border border-red-300 animate-pulse">
-                  ⚠ {errors.title}
-                </span>
-              )}
-            </div>
+            <label className="text-xs font-bold text-[#5D3234]">Dish Name (Min 3 chars) *</label>
             <input 
               type="text" 
               placeholder="Dish Name (e.g. Rajma Chawal)" 
@@ -1311,14 +1304,7 @@ const PostDishModal = ({ isOpen, onClose, form, setForm, errors, setErrors, onSu
           </div>
           <div className="flex gap-3">
              <div className="w-1/2 flex flex-col gap-1">
-                <div className="flex justify-between items-baseline">
-                  <label className="text-xs font-bold text-[#5D3234]">Price (₹) (Min ₹20) *</label>
-                  {errors?.price && (
-                    <span className="text-red-700 text-[11px] font-semibold bg-red-100 px-2 py-0.5 rounded-md border border-red-300 animate-pulse">
-                      ⚠ {errors.price}
-                    </span>
-                  )}
-                </div>
+                <label className="text-xs font-bold text-[#5D3234]">Price (₹) (Min ₹20) *</label>
                 <input 
                   type="number" 
                   placeholder="Min ₹20" 

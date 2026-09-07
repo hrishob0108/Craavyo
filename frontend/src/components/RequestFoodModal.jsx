@@ -174,16 +174,9 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
             <form onSubmit={handleSubmit} className="space-y-5 relative z-10" noValidate>
               {/* Dish Name */}
               <div>
-                <div className="flex justify-between items-baseline mb-2 ml-1">
-                  <label className="block text-gray-700 text-sm font-bold">
-                    What dish do you want? *
-                  </label>
-                  {errors.dishName && (
-                    <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded border border-red-200 animate-pulse">
-                      ⚠ {errors.dishName}
-                    </span>
-                  )}
-                </div>
+                <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
+                  What dish do you want? *
+                </label>
                 <input
                   type="text"
                   placeholder="e.g. Paneer Butter Masala & Roti (min 3 chars)"
@@ -221,16 +214,9 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
               {/* Budget & Time Needed */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="flex justify-between items-baseline mb-2 ml-1">
-                    <label className="block text-gray-700 text-sm font-bold">
-                      Budget (₹) *
-                    </label>
-                    {errors.price && (
-                      <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded border border-red-200 animate-pulse">
-                        ⚠ {errors.price}
-                      </span>
-                    )}
-                  </div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
+                    Budget (₹) *
+                  </label>
                   <div className="relative flex items-center">
                     <FiDollarSign className="absolute left-4 text-gray-400 font-bold" />
                     <input
@@ -261,16 +247,9 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                 </div>
 
                 <div>
-                  <div className="flex justify-between items-baseline mb-2 ml-1">
-                    <label className="block text-gray-700 text-sm font-bold">
-                      Needed By *
-                    </label>
-                    {errors.neededBy && (
-                      <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded border border-red-200 animate-pulse">
-                        ⚠ {errors.neededBy}
-                      </span>
-                    )}
-                  </div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
+                    Needed By *
+                  </label>
                   <div className="relative flex items-center">
                     <FiClock className="absolute left-4 text-gray-400" />
                     <input
@@ -297,16 +276,9 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
 
               {/* Delivery Location */}
               <div>
-                <div className="flex justify-between items-baseline mb-2 ml-1">
-                  <label className="block text-gray-700 text-sm font-bold">
-                    Delivery Location *
-                  </label>
-                  {errors.deliveryLocation && (
-                    <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded border border-red-200 animate-pulse">
-                      ⚠ {errors.deliveryLocation}
-                    </span>
-                  )}
-                </div>
+                <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
+                  Delivery Location *
+                </label>
                 <div className="relative flex items-center">
                   <FiMapPin className="absolute left-4 text-gray-400" />
                   <input

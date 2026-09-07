@@ -158,36 +158,19 @@ export const createAdminAccount = async ({ email, password, name, role, assigned
 };
 
 /**
- * Fetch all leadership team members with auto-migration from legacy users
+ * Fetch all leadership team members strictly from the 'admins' partition
  */
 export const getAdminTeam = async (filterState = "ALL") => {
   const adminsCol = collection(db, "admins");
   const snap = await getDocs(adminsCol);
   const team = [];
-  const knownUids = new Set();
 
   snap.forEach((d) => {
     const data = d.data();
     if (["founder", "national_head", "state_head"].includes(data.role)) {
       team.push({ _id: d.id, id: d.id, ...data });
-      knownUids.add(d.id);
     }
   });
-
-  // Check legacy users collection and auto-migrate legacy leaders
-  try {
-    const legacySnap = await getDocs(collection(db, "users"));
-    for (const d of legacySnap.docs) {
-      const data = d.data();
-      if (["founder", "national_head", "state_head"].includes(data.role) && !knownUids.has(d.id)) {
-        await setDoc(doc(db, "admins", d.id), data, { merge: true });
-        team.push({ _id: d.id, id: d.id, ...data });
-        knownUids.add(d.id);
-      }
-    }
-  } catch (e) {
-    console.warn("Legacy team sync note:", e);
-  }
 
   if (filterState && filterState !== "ALL") {
     return team.filter((m) => m.assignedState === filterState || m.assignedState === "ALL");

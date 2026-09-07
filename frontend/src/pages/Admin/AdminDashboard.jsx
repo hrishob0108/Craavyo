@@ -143,9 +143,24 @@ const AdminDashboard = () => {
 
   const canManageMember = (member) => {
     if (!admin || !member) return false;
-    if (member.role === "founder") return false;
+    // Cannot edit or delete yourself
+    if (member._id === admin._id || member.email?.toLowerCase() === admin.email?.toLowerCase()) return false;
+
+    // Master Founder emails configured in environment
+    const masterFounderEmails = (
+      import.meta.env.VITE_FOUNDER_EMAILS ||
+      "hrishobp@gmail.com,naveenpavurala2005@gmail.com"
+    ).split(",").map(e => e.trim().toLowerCase());
+
+    // Protected master founders cannot be modified or deleted
+    if (masterFounderEmails.includes(member.email?.toLowerCase())) return false;
+
+    // Logged-in Founder has authority to edit/delete any other administrator
     if (admin.role === "founder") return true;
+
+    // National Head can manage/delete regional State Heads
     if (admin.role === "national_head" && member.role === "state_head") return true;
+
     return false;
   };
 

@@ -21,8 +21,8 @@ import { db } from "../firebase";
  */
 export const createOrder = async (orderData) => {
   const priceNum = Number(orderData.price);
-  if (orderData.price === undefined || orderData.price === null || isNaN(priceNum) || priceNum < 10) {
-    throw new Error("Minimum price must be at least ₹10.");
+  if (orderData.price === undefined || orderData.price === null || isNaN(priceNum) || priceNum < 20) {
+    throw new Error("Minimum price must be at least ₹20.");
   }
 
   const ordersCol = collection(db, "orders");

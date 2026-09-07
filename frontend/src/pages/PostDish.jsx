@@ -36,6 +36,34 @@ const PostDish = () => {
   const [image, setImage] = useState('');
   const [errors, setErrors] = useState({});
 
+  const validateField = (field, val) => {
+    let err = null;
+    if (field === 'title') {
+      if (!val || !val.trim()) err = "Meal title is required.";
+      else if (val.trim().length < 3) err = "Title must be at least 3 characters.";
+    } else if (field === 'description') {
+      if (!val || !val.trim()) err = "Description is required.";
+      else if (val.trim().length < 5) err = "Description must be at least 5 characters.";
+    } else if (field === 'price') {
+      if (val === "" || val === undefined || val === null) err = "Price is required (min ₹20).";
+      else if (isNaN(val)) err = "Please enter a valid price.";
+      else if (Number(val) < 0) err = "Price cannot be negative.";
+      else if (Number(val) < 20) err = "Minimum price must be at least ₹20.";
+    } else if (field === 'servings') {
+      if (val === "" || val === undefined || val === null) err = "Servings is required.";
+      else if (isNaN(val) || Number(val) <= 0) err = "At least 1 serving is required.";
+    } else if (field === 'readyBy') {
+      if (!val) err = "Pickup time is required.";
+    } else if (field === 'pickupPoint') {
+      if (!val || !val.trim()) err = "Pickup point is required.";
+      else if (val.trim().length < 3) err = "Pickup point must be at least 3 characters.";
+    } else if (field === 'image') {
+      if (!val) err = "Meal photo is required.";
+    }
+    setErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
   const validateForm = () => {
     const errs = {};
     if (!title.trim()) {
@@ -46,17 +74,23 @@ const PostDish = () => {
 
     if (!description.trim()) {
       errs.description = "Description is required.";
+    } else if (description.trim().length < 5) {
+      errs.description = "Description must be at least 5 characters.";
     }
 
     if (price === "" || price === undefined || price === null) {
-      errs.price = "Price is required (min ₹10).";
-    } else if (isNaN(price) || Number(price) < 10) {
-      errs.price = "Minimum price must be at least ₹10.";
+      errs.price = "Price is required (min ₹20).";
+    } else if (isNaN(price)) {
+      errs.price = "Please enter a valid price.";
+    } else if (Number(price) < 0) {
+      errs.price = "Price cannot be negative.";
+    } else if (Number(price) < 20) {
+      errs.price = "Minimum price must be at least ₹20.";
     }
 
-    if (servings === "" || servings === undefined) {
+    if (servings === "" || servings === undefined || servings === null) {
       errs.servings = "Servings is required.";
-    } else if (isNaN(servings) || Number(servings) < 1) {
+    } else if (isNaN(servings) || Number(servings) <= 0) {
       errs.servings = "At least 1 serving is required.";
     }
 
@@ -66,6 +100,8 @@ const PostDish = () => {
 
     if (!pickupPoint.trim()) {
       errs.pickupPoint = "Pickup point is required.";
+    } else if (pickupPoint.trim().length < 3) {
+      errs.pickupPoint = "Pickup point must be at least 3 characters.";
     }
 
     if (!image) {
@@ -193,14 +229,7 @@ const PostDish = () => {
 
           {/* Meal Title */}
           <div className="mb-6">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif">Meal Title *</label>
-              {errors.title && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.title}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2">Meal Title *</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -214,33 +243,38 @@ const PostDish = () => {
                 value={title}
                 onChange={(e) => {
                   setTitle(e.target.value);
-                  if (errors.title) setErrors((prev) => ({ ...prev, title: null }));
+                  validateField('title', e.target.value);
                 }}
+                onBlur={(e) => validateField('title', e.target.value)}
               />
             </div>
+            {errors.title && (
+              <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                ⚠ {errors.title}
+              </p>
+            )}
           </div>
 
           {/* Description */}
           <div className="mb-8">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif">Description *</label>
-              {errors.description && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.description}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2">Description *</label>
             <textarea 
-              placeholder="Cooked freshly this morning, ghee thadka, served with care"
+              placeholder="Cooked freshly this morning, ghee thadka, served with care (min 5 chars)"
               className={`w-full bg-transparent border rounded-lg py-3 px-4 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors h-[80px] resize-none ${
                 errors.description ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
               }`}
               value={description}
               onChange={(e) => {
                 setDescription(e.target.value);
-                if (errors.description) setErrors((prev) => ({ ...prev, description: null }));
+                validateField('description', e.target.value);
               }}
+              onBlur={(e) => validateField('description', e.target.value)}
             />
+            {errors.description && (
+              <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                ⚠ {errors.description}
+              </p>
+            )}
           </div>
 
           {/* Diet Type & Spicy Level */}
@@ -285,71 +319,72 @@ const PostDish = () => {
 
           {/* Price */}
           <div className="mb-8">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif flex items-center gap-1.5">
-                Price (Min ₹10) *
-              </label>
-              {errors.price && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.price}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2 flex items-center gap-1.5">
+              Price (Min ₹20) *
+            </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 font-semibold">₹</span>
               <input 
                 type="number" 
-                placeholder="150"
+                placeholder="Min 20" 
+                min="20"
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e' || e.key === '+') {
+                    e.preventDefault();
+                  }
+                }}
                 className={`w-full bg-transparent border rounded-lg py-2.5 pl-10 pr-4 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors appearance-none ${
                   errors.price ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
                 }`}
                 value={price}
                 onChange={(e) => {
                   setPrice(e.target.value);
-                  if (errors.price) setErrors((prev) => ({ ...prev, price: null }));
+                  validateField('price', e.target.value);
                 }}
-                min="10"
+                onBlur={(e) => validateField('price', e.target.value)}
               />
             </div>
+            {errors.price && (
+              <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                ⚠ {errors.price}
+              </p>
+            )}
           </div>
 
           {/* Servings, Ready, Pickup */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Servings *</label>
-                {errors.servings && (
-                  <span className="text-red-200 text-[11px] font-semibold bg-red-900/60 px-2 py-0.5 rounded border border-red-400/50">
-                    ⚠ {errors.servings}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Servings (Min 1) *</label>
               <div className="relative">
                 <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <input 
                   type="number" 
+                  min="1"
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'e' || e.key === '.' || e.key === '+') {
+                      e.preventDefault();
+                    }
+                  }}
                   className={`w-full bg-transparent border rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none ${
                     errors.servings ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
                   }`}
                   value={servings}
                   onChange={(e) => {
                     setServings(e.target.value);
-                    if (errors.servings) setErrors((prev) => ({ ...prev, servings: null }));
+                    validateField('servings', e.target.value);
                   }}
-                  placeholder="4"
-                  min="1"
+                  onBlur={(e) => validateField('servings', e.target.value)}
+                  placeholder="1"
                 />
               </div>
+              {errors.servings && (
+                <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                  ⚠ {errors.servings}
+                </p>
+              )}
             </div>
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Ready by *</label>
-                {errors.readyBy && (
-                  <span className="text-red-200 text-[11px] font-semibold bg-red-900/60 px-2 py-0.5 rounded border border-red-400/50">
-                    ⚠ {errors.readyBy}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Ready by *</label>
               <div className="relative">
                 <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4 pointer-events-none" />
                 <select 
@@ -359,8 +394,9 @@ const PostDish = () => {
                   value={readyBy}
                   onChange={(e) => {
                     setReadyBy(e.target.value);
-                    if (errors.readyBy) setErrors((prev) => ({ ...prev, readyBy: null }));
+                    validateField('readyBy', e.target.value);
                   }}
+                  onBlur={(e) => validateField('readyBy', e.target.value)}
                   style={{ backgroundColor: 'transparent' }}
                 >
                   <option value="" disabled className="text-black/50">Select time</option>
@@ -372,16 +408,14 @@ const PostDish = () => {
                   <svg className="w-4 h-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
               </div>
+              {errors.readyBy && (
+                <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                  ⚠ {errors.readyBy}
+                </p>
+              )}
             </div>
             <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Pickup point *</label>
-                {errors.pickupPoint && (
-                  <span className="text-red-200 text-[11px] font-semibold bg-red-900/60 px-2 py-0.5 rounded border border-red-400/50">
-                    ⚠ {errors.pickupPoint}
-                  </span>
-                )}
-              </div>
+              <label className="block text-white text-[15px] font-serif mb-2">Pickup point *</label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <input 
@@ -392,26 +426,30 @@ const PostDish = () => {
                   value={pickupPoint}
                   onChange={(e) => {
                     setPickupPoint(e.target.value);
-                    if (errors.pickupPoint) setErrors((prev) => ({ ...prev, pickupPoint: null }));
+                    validateField('pickupPoint', e.target.value);
                   }}
+                  onBlur={(e) => validateField('pickupPoint', e.target.value)}
                   placeholder="Hostel Block A, Gate 2..."
                 />
               </div>
+              {errors.pickupPoint && (
+                <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                  ⚠ {errors.pickupPoint}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Photo Upload */}
           <div className="mb-10">
-            <div className="flex justify-between items-baseline mb-2">
-              <label className="block text-white text-[15px] font-serif flex items-center gap-1.5">
-                <Camera className="w-4 h-4" /> Add a photo of your meal *
-              </label>
-              {errors.image && (
-                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
-                  ⚠ {errors.image}
-                </span>
-              )}
-            </div>
+            <label className="block text-white text-[15px] font-serif mb-2 flex items-center gap-1.5">
+              <Camera className="w-4 h-4" /> Add a photo of your meal *
+            </label>
+            {errors.image && (
+              <p className="text-red-200 text-xs font-semibold mb-2 ml-1 text-left flex items-center gap-1">
+                ⚠ {errors.image}
+              </p>
+            )}
             <input 
               type="file" 
               accept="image/*" 

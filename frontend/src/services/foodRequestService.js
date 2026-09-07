@@ -23,8 +23,8 @@ import { createOrder } from "./orderService";
  */
 export const createFoodRequest = async (requestData) => {
   const priceNum = Number(requestData.price);
-  if (requestData.price === undefined || requestData.price === null || isNaN(priceNum) || priceNum < 10) {
-    throw new Error("Minimum price must be at least ₹10.");
+  if (requestData.price === undefined || requestData.price === null || isNaN(priceNum) || priceNum < 20) {
+    throw new Error("Minimum price must be at least ₹20.");
   }
 
   const foodReqCol = collection(db, "foodRequests");

@@ -171,14 +171,18 @@ const DayscholarDashboard = () => {
      const errs = {};
      if (!postDishForm.title?.trim()) {
        errs.title = "Dish name is required.";
-     } else if (postDishForm.title.trim().length < 2) {
-       errs.title = "Dish name must be at least 2 characters.";
+     } else if (postDishForm.title.trim().length < 3) {
+       errs.title = "Dish name must be at least 3 characters.";
      }
 
      if (postDishForm.price === "" || postDishForm.price === undefined || postDishForm.price === null) {
-       errs.price = "Price is required (min ₹10).";
-     } else if (isNaN(postDishForm.price) || Number(postDishForm.price) < 10) {
-       errs.price = "Minimum price must be at least ₹10.";
+       errs.price = "Price is required (min ₹20).";
+     } else if (isNaN(postDishForm.price)) {
+       errs.price = "Please enter a valid price.";
+     } else if (Number(postDishForm.price) < 0) {
+       errs.price = "Price cannot be negative.";
+     } else if (Number(postDishForm.price) < 20) {
+       errs.price = "Minimum price must be at least ₹20.";
      }
 
      if (Object.keys(errs).length > 0) {
@@ -1252,6 +1256,22 @@ const OrderRequests = ({ requests, onUpdateStatus, actionLoadingId }) => (
 
 const PostDishModal = ({ isOpen, onClose, form, setForm, errors, setErrors, onSubmit, isPublishing }) => {
   if (!isOpen) return null;
+
+  const validateModalField = (field, val) => {
+    let err = null;
+    if (field === 'title') {
+      if (!val || !val.trim()) err = "Dish name is required.";
+      else if (val.trim().length < 3) err = "Must be at least 3 characters.";
+    } else if (field === 'price') {
+      if (val === "" || val === undefined || val === null) err = "Price is required (min ₹20).";
+      else if (isNaN(val)) err = "Please enter a valid price.";
+      else if (Number(val) < 0) err = "Price cannot be negative.";
+      else if (Number(val) < 20) err = "Minimum price must be at least ₹20.";
+    }
+    setErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="bg-[#FCE5E2] border border-[#D66E73]/30 rounded-[24px] p-6 w-full max-w-md shadow-2xl relative">
@@ -1261,14 +1281,7 @@ const PostDishModal = ({ isOpen, onClose, form, setForm, errors, setErrors, onSu
         </div>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <div className="flex justify-between items-baseline">
-              <label className="text-xs font-bold text-[#5D3234]">Dish Name *</label>
-              {errors?.title && (
-                <span className="text-red-700 text-[11px] font-semibold bg-red-100 px-2 py-0.5 rounded-md border border-red-300 animate-pulse">
-                  ⚠ {errors.title}
-                </span>
-              )}
-            </div>
+            <label className="text-xs font-bold text-[#5D3234]">Dish Name (Min 3 chars) *</label>
             <input 
               type="text" 
               placeholder="Dish Name (e.g. Rajma Chawal)" 
@@ -1278,34 +1291,44 @@ const PostDishModal = ({ isOpen, onClose, form, setForm, errors, setErrors, onSu
               value={form.title} 
               onChange={e => {
                 setForm({...form, title: e.target.value});
-                if (errors?.title) setErrors(prev => ({ ...prev, title: null }));
+                validateModalField('title', e.target.value);
               }} 
+              onBlur={e => validateModalField('title', e.target.value)}
               autoFocus 
             />
+            {errors?.title && (
+              <p className="text-red-600 text-xs font-semibold mt-0.5 text-left flex items-center gap-1">
+                ⚠ {errors.title}
+              </p>
+            )}
           </div>
           <div className="flex gap-3">
              <div className="w-1/2 flex flex-col gap-1">
-                <div className="flex justify-between items-baseline">
-                  <label className="text-xs font-bold text-[#5D3234]">Price (₹) *</label>
-                  {errors?.price && (
-                    <span className="text-red-700 text-[11px] font-semibold bg-red-100 px-2 py-0.5 rounded-md border border-red-300 animate-pulse">
-                      ⚠ {errors.price}
-                    </span>
-                  )}
-                </div>
+                <label className="text-xs font-bold text-[#5D3234]">Price (₹) (Min ₹20) *</label>
                 <input 
                   type="number" 
-                  placeholder="Min ₹10" 
-                  min="10"
+                  placeholder="Min ₹20" 
+                  min="20"
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'e' || e.key === '+') {
+                      e.preventDefault();
+                    }
+                  }}
                   className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium transition-colors ${
                     errors?.price ? 'border-red-500 ring-2 ring-red-400/30' : 'border-[#D66E73]/30'
                   }`} 
                   value={form.price} 
                   onChange={e => {
                     setForm({...form, price: e.target.value});
-                    if (errors?.price) setErrors(prev => ({ ...prev, price: null }));
+                    validateModalField('price', e.target.value);
                   }} 
+                  onBlur={e => validateModalField('price', e.target.value)}
                 />
+                {errors?.price && (
+                  <p className="text-red-600 text-xs font-semibold mt-0.5 text-left flex items-center gap-1">
+                    ⚠ {errors.price}
+                  </p>
+                )}
              </div>
              <div className="w-1/2 flex flex-col gap-1">
                 <label className="text-xs font-bold text-[#5D3234]">Tag</label>

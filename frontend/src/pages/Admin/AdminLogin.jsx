@@ -13,7 +13,7 @@ import {
 } from "react-icons/fi";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth } from "../../firebase";
-import { getAdminProfile, bootstrapFounderAccount } from "../../services/firestoreService";
+import { getAdminProfile, getUserProfile, bootstrapFounderAccount } from "../../services/firestoreService";
 import toast from "react-hot-toast";
 
 const AdminLogin = () => {
@@ -179,12 +179,16 @@ const AdminLogin = () => {
       const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
       fbUser = userCredential.user;
       token = await fbUser.getIdToken();
-
       const profile = await getAdminProfile(fbUser.uid);
 
       if (!profile || !["founder", "national_head", "state_head"].includes(profile.role)) {
         await signOut(auth);
-        const err = "Access Denied. Your account is not registered with administrative leadership privileges.";
+        sessionStorage.removeItem("adminUser");
+        // Check if user is a student to provide clear guidance
+        const studentProfile = await getUserProfile(fbUser.uid);
+        const err = studentProfile
+          ? "Access Denied. This is the Executive Portal. Students must log in via the Student Login portal (/login)."
+          : "Access Denied. Your account is not registered with administrative leadership privileges.";
         setErrorMsg(err);
         toast.error(err, { duration: 6000 });
         setIsLoading(false);
@@ -366,10 +370,10 @@ const AdminLogin = () => {
         {/* Footer controls */}
         <div className="mt-8 pt-6 border-t border-white/10 flex items-center justify-between text-xs text-white/40">
           <Link
-            to="/home"
-            className="hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+            to="/login"
+            className="hover:text-white transition-colors flex items-center gap-1 cursor-pointer font-medium"
           >
-            ← Back to Student App
+            ← Student Login
           </Link>
           <span className="text-[11px] text-white/30">
             RBAC Protected Portal

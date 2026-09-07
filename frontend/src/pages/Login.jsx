@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiMail, FiLock, FiEye, FiEyeOff, FiArrowLeft, FiLoader } from "react-icons/fi";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth } from "../firebase";
-import { getUserProfile } from "../services/firestoreService";
+import { getUserProfile, getAdminProfile } from "../services/firestoreService";
 import toast from "react-hot-toast";
 import GOO from "../firebase";
 
@@ -31,22 +31,64 @@ const Login = () => {
     if (validate()) {
       setIsLoading(true);
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        const cleanEmail = email.trim().toLowerCase();
+        const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
         const firebaseUser = userCredential.user;
         const profile = await getUserProfile(firebaseUser.uid);
-        const token = await firebaseUser.getIdToken();
 
+        // Strictly verify that this account belongs to a student partition
+        if (!profile) {
+          // Check if this account belongs to administrative leadership
+          const adminProfile = await getAdminProfile(firebaseUser.uid);
+          const founderEmails = (
+            import.meta.env.VITE_FOUNDER_EMAILS ||
+            "hrishobp@gmail.com,naveenpavurala2005@gmail.com"
+          )
+            .split(",")
+            .map((em) => em.trim().toLowerCase());
+          const isFounder = founderEmails.includes(cleanEmail);
+
+          if (adminProfile || isFounder) {
+            await signOut(auth);
+            sessionStorage.removeItem("user");
+            sessionStorage.removeItem("currentUser");
+            toast.error(
+              "This is the Student Portal. Please log in through the Executive Command Center (/admin/login).",
+              { duration: 6000 }
+            );
+            navigate("/admin/login");
+            return;
+          }
+
+          // Not an admin and no student profile found
+          await signOut(auth);
+          sessionStorage.removeItem("user");
+          sessionStorage.removeItem("currentUser");
+          toast.error("No student account found for this email. Please register first.");
+          return;
+        }
+
+        // Validate student role
+        if (!["hosteler", "dayscholar"].includes(profile.role)) {
+          await signOut(auth);
+          sessionStorage.removeItem("user");
+          sessionStorage.removeItem("currentUser");
+          toast.error("Unauthorized role for the Student Portal.");
+          return;
+        }
+
+        const token = await firebaseUser.getIdToken();
         const sessionUser = {
           _id: firebaseUser.uid,
           uid: firebaseUser.uid,
-          name: profile?.name || firebaseUser.displayName || "Student",
-          email: profile?.email || firebaseUser.email,
-          role: profile?.role || "dayscholar",
-          phone: profile?.phone || "",
-          isPhoneVerified: Boolean(profile?.isPhoneVerified),
-          state: profile?.state || "",
-          district: profile?.district || "",
-          collegeName: profile?.collegeName || "",
+          name: profile.name || firebaseUser.displayName || "Student",
+          email: profile.email || firebaseUser.email,
+          role: profile.role,
+          phone: profile.phone || "",
+          isPhoneVerified: Boolean(profile.isPhoneVerified),
+          state: profile.state || "",
+          district: profile.district || "",
+          collegeName: profile.collegeName || "",
           token
         };
 
@@ -261,6 +303,16 @@ const Login = () => {
             Sign Up
           </Link>
         </p>
+
+        {/* Executive Leadership Portal Separation */}
+        <div className="mt-4 pt-3 border-t border-white/20 text-center">
+          <p className="text-xs text-white/70">
+            Administrative personnel?{" "}
+            <Link to="/admin/login" className="font-bold text-amber-200 hover:text-white underline ml-1 transition-colors">
+              Executive Portal →
+            </Link>
+          </p>
+        </div>
 
       </motion.div>
     </div>

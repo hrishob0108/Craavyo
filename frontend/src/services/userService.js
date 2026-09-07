@@ -16,29 +16,17 @@ import { db, auth } from "../firebase";
  */
 export const getAdminProfile = async (uid) => {
   if (!uid) return null;
-  // 1. Check partitioned admins collection
+  // Check partitioned admins collection strictly
   const adminDocRef = doc(db, "admins", uid);
   const adminSnap = await getDoc(adminDocRef);
   if (adminSnap.exists()) {
     return { _id: uid, uid, ...adminSnap.data() };
   }
-
-  // 2. Fallback check legacy users collection and auto-migrate to admins
-  const userDocRef = doc(db, "users", uid);
-  const userSnap = await getDoc(userDocRef);
-  if (userSnap.exists()) {
-    const data = userSnap.data();
-    if (["founder", "national_head", "state_head"].includes(data.role)) {
-      await setDoc(adminDocRef, data, { merge: true });
-      return { _id: uid, uid, ...data };
-    }
-  }
   return null;
 };
 
 /**
- * Fetch student or user profile across partitions (hostelers, dayscholars, admins)
- * with legacy fallback and auto-migration
+ * Fetch student user profile strictly from student partitions (hostelers or dayscholars)
  */
 export const getUserProfile = async (uid) => {
   if (!uid) return null;
@@ -57,26 +45,14 @@ export const getUserProfile = async (uid) => {
     return { _id: uid, uid, ...dayscholarSnap.data(), role: dayscholarSnap.data().role || "dayscholar" };
   }
 
-  // 3. Check admins partition
-  const adminRef = doc(db, "admins", uid);
-  const adminSnap = await getDoc(adminRef);
-  if (adminSnap.exists()) {
-    return { _id: uid, uid, ...adminSnap.data() };
-  }
-
-  // 4. Legacy users fallback with automatic partition migration
+  // 3. Legacy users fallback (strictly for student roles only)
   const legacyRef = doc(db, "users", uid);
   const legacySnap = await getDoc(legacyRef);
   if (legacySnap.exists()) {
     const data = legacySnap.data();
-    if (data.role === "hosteler") {
-      await setDoc(hostelerRef, data, { merge: true });
-    } else if (data.role === "dayscholar") {
-      await setDoc(dayscholarRef, data, { merge: true });
-    } else if (["founder", "national_head", "state_head"].includes(data.role)) {
-      await setDoc(adminRef, data, { merge: true });
+    if (["hosteler", "dayscholar"].includes(data.role)) {
+      return { _id: uid, uid, ...data };
     }
-    return { _id: uid, uid, ...data };
   }
 
   return null;
@@ -86,8 +62,8 @@ export const getUserProfile = async (uid) => {
  * Create a new user profile routed directly into their dedicated partition
  */
 export const createUserProfile = async (uid, profileData) => {
-  const role = profileData.role || "dayscholar";
-  const targetCol = role === "hosteler" ? "hostelers" : role === "dayscholar" ? "dayscholars" : "admins";
+  const role = profileData.role === "hosteler" ? "hosteler" : "dayscholar";
+  const targetCol = role === "hosteler" ? "hostelers" : "dayscholars";
   const targetDocRef = doc(db, targetCol, uid);
 
   const dataToSave = {
@@ -117,7 +93,7 @@ export const updateUserProfile = async (uid, updateData) => {
     updatedAt: serverTimestamp(),
   };
 
-  // Identify which partition collection this user belongs to
+  // Identify which student partition collection this user belongs to
   let targetRef = null;
   const hostelerSnap = await getDoc(doc(db, "hostelers", uid));
   if (hostelerSnap.exists()) {
@@ -127,14 +103,9 @@ export const updateUserProfile = async (uid, updateData) => {
     if (dayscholarSnap.exists()) {
       targetRef = doc(db, "dayscholars", uid);
     } else {
-      const adminSnap = await getDoc(doc(db, "admins", uid));
-      if (adminSnap.exists()) {
-        targetRef = doc(db, "admins", uid);
-      } else {
-        const role = updateData.role || "hosteler";
-        const col = role === "hosteler" ? "hostelers" : role === "dayscholar" ? "dayscholars" : "admins";
-        targetRef = doc(db, col, uid);
-      }
+      const role = updateData.role === "hosteler" ? "hosteler" : "dayscholar";
+      const col = role === "hosteler" ? "hostelers" : "dayscholars";
+      targetRef = doc(db, col, uid);
     }
   }
 

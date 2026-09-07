@@ -19,11 +19,16 @@ import { db } from "../firebase";
  * Create a new home-cooked dish listed by a Day Scholar
  */
 export const createMeal = async (mealData) => {
+  const priceNum = Number(mealData.price);
+  if (mealData.price === undefined || mealData.price === null || isNaN(priceNum) || priceNum < 10) {
+    throw new Error("Minimum price must be at least ₹10.");
+  }
+
   const mealsCol = collection(db, "meals");
   const payload = {
     title: mealData.title || "",
     description: mealData.description || "",
-    price: Number(mealData.price) || 0,
+    price: priceNum,
     image: mealData.image || "",
     tag: mealData.tag || "New",
     isVeg: mealData.isVeg !== undefined ? mealData.isVeg : true,

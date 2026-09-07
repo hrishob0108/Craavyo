@@ -24,16 +24,45 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
     neededBy: '',
     deliveryLocation: ''
   });
+  const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+
+  const handleClose = () => {
+    setErrors({});
+    onClose();
+  };
+
+  const validateForm = () => {
+    const errs = {};
+    if (!form.dishName.trim()) {
+      errs.dishName = "Dish name is required.";
+    } else if (form.dishName.trim().length < 2) {
+      errs.dishName = "Must be at least 2 characters.";
+    }
+
+    if (form.price === "" || form.price === undefined || form.price === null) {
+      errs.price = "Budget is required (min ₹10).";
+    } else if (isNaN(form.price) || Number(form.price) < 10) {
+      errs.price = "Minimum price must be at least ₹10.";
+    }
+
+    if (!form.neededBy.trim()) {
+      errs.neededBy = "Needed by time is required.";
+    }
+
+    if (!form.deliveryLocation.trim()) {
+      errs.deliveryLocation = "Delivery location is required.";
+    }
+
+    setErrors(errs);
+    return errs;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.dishName || !form.price || !form.deliveryLocation || !form.neededBy) {
-      return toast.error("Please fill in all required fields.");
-    }
-    
-    if (isNaN(form.price) || Number(form.price) <= 0) {
-      return toast.error("Please enter a valid price.");
+    const formErrors = validateForm();
+    if (Object.keys(formErrors).length > 0) {
+      return toast.error(Object.values(formErrors)[0]);
     }
 
     try {
@@ -46,11 +75,11 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
         buyerId: userId,
         buyerName: user?.name || "Hosteler",
         collegeName: userCollege,
-        dishName: form.dishName,
-        description: form.description,
+        dishName: form.dishName.trim(),
+        description: form.description.trim(),
         price: Number(form.price),
-        deliveryLocation: form.deliveryLocation,
-        neededBy: form.neededBy
+        deliveryLocation: form.deliveryLocation.trim(),
+        neededBy: form.neededBy.trim()
       });
 
       toast.success(`Requested ${form.dishName} successfully!`);
@@ -64,6 +93,7 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
         neededBy: '',
         deliveryLocation: ''
       });
+      setErrors({});
       onClose();
     } catch (err) {
       console.error(err);
@@ -83,7 +113,7 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
             initial="hidden"
             animate="visible"
             exit="exit"
-            onClick={onClose}
+            onClick={handleClose}
             className="fixed inset-0 bg-black/75 backdrop-blur-md"
           />
 
@@ -107,7 +137,7 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                 </h3>
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors"
               >
                 <FiX className="w-5 h-5" />
@@ -115,19 +145,30 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
+            <form onSubmit={handleSubmit} className="space-y-5 relative z-10" noValidate>
               {/* Dish Name */}
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
-                  What dish do you want? *
-                </label>
+                <div className="flex justify-between items-baseline mb-2 ml-1">
+                  <label className="block text-gray-700 text-sm font-bold">
+                    What dish do you want? *
+                  </label>
+                  {errors.dishName && (
+                    <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded border border-red-200 animate-pulse">
+                      ⚠ {errors.dishName}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   placeholder="e.g. Paneer Butter Masala & Roti"
                   value={form.dishName}
-                  onChange={(e) => setForm({ ...form, dishName: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20 focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner"
-                  required
+                  onChange={(e) => {
+                    setForm({ ...form, dishName: e.target.value });
+                    if (errors.dishName) setErrors(prev => ({ ...prev, dishName: null }));
+                  }}
+                  className={`w-full px-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
+                    errors.dishName ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
+                  }`}
                 />
               </div>
 
@@ -148,35 +189,58 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
               {/* Budget & Time Needed */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
-                    Your Budget (₹) *
-                  </label>
+                  <div className="flex justify-between items-baseline mb-2 ml-1">
+                    <label className="block text-gray-700 text-sm font-bold">
+                      Budget (₹) *
+                    </label>
+                    {errors.price && (
+                      <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded border border-red-200 animate-pulse">
+                        ⚠ {errors.price}
+                      </span>
+                    )}
+                  </div>
                   <div className="relative flex items-center">
                     <FiDollarSign className="absolute left-4 text-gray-400 font-bold" />
                     <input
                       type="number"
-                      placeholder="Price"
+                      placeholder="Min ₹10"
+                      min="10"
                       value={form.price}
-                      onChange={(e) => setForm({ ...form, price: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20 focus:outline-none focus:ring-4 transition-all font-bold text-base shadow-inner"
-                      required
+                      onChange={(e) => {
+                        setForm({ ...form, price: e.target.value });
+                        if (errors.price) setErrors(prev => ({ ...prev, price: null }));
+                      }}
+                      className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-bold text-base shadow-inner ${
+                        errors.price ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
+                      }`}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
-                    Needed By *
-                  </label>
+                  <div className="flex justify-between items-baseline mb-2 ml-1">
+                    <label className="block text-gray-700 text-sm font-bold">
+                      Needed By *
+                    </label>
+                    {errors.neededBy && (
+                      <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded border border-red-200 animate-pulse">
+                        ⚠ {errors.neededBy}
+                      </span>
+                    )}
+                  </div>
                   <div className="relative flex items-center">
                     <FiClock className="absolute left-4 text-gray-400" />
                     <input
                       type="text"
                       placeholder="e.g. 8:30 PM"
                       value={form.neededBy}
-                      onChange={(e) => setForm({ ...form, neededBy: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20 focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner"
-                      required
+                      onChange={(e) => {
+                        setForm({ ...form, neededBy: e.target.value });
+                        if (errors.neededBy) setErrors(prev => ({ ...prev, neededBy: null }));
+                      }}
+                      className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
+                        errors.neededBy ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
+                      }`}
                     />
                   </div>
                 </div>
@@ -184,18 +248,29 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
 
               {/* Delivery Location */}
               <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
-                  Delivery Location *
-                </label>
+                <div className="flex justify-between items-baseline mb-2 ml-1">
+                  <label className="block text-gray-700 text-sm font-bold">
+                    Delivery Location *
+                  </label>
+                  {errors.deliveryLocation && (
+                    <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded border border-red-200 animate-pulse">
+                      ⚠ {errors.deliveryLocation}
+                    </span>
+                  )}
+                </div>
                 <div className="relative flex items-center">
                   <FiMapPin className="absolute left-4 text-gray-400" />
                   <input
                     type="text"
                     placeholder="e.g. Room 405, Hostel C"
                     value={form.deliveryLocation}
-                    onChange={(e) => setForm({ ...form, deliveryLocation: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20 focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner"
-                    required
+                    onChange={(e) => {
+                      setForm({ ...form, deliveryLocation: e.target.value });
+                      if (errors.deliveryLocation) setErrors(prev => ({ ...prev, deliveryLocation: null }));
+                    }}
+                    className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
+                      errors.deliveryLocation ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
+                    }`}
                   />
                 </div>
               </div>

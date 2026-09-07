@@ -21,6 +21,39 @@ const RequestCraving = () => {
   const [neededBy, setNeededBy] = useState('');
   const [deliveryLocation, setDeliveryLocation] = useState('');
   const [image, setImage] = useState('');
+  const [errors, setErrors] = useState({});
+
+  const validateForm = () => {
+    const errs = {};
+    if (!dishName.trim()) {
+      errs.dishName = "Dish name is required.";
+    } else if (dishName.trim().length < 2) {
+      errs.dishName = "Dish name must be at least 2 characters.";
+    }
+
+    if (budget === "" || budget === undefined || budget === null) {
+      errs.budget = "Budget is required (min ₹10).";
+    } else if (isNaN(budget) || Number(budget) < 10) {
+      errs.budget = "Minimum price must be at least ₹10.";
+    }
+
+    if (servings === "" || servings === undefined) {
+      errs.servings = "Servings is required.";
+    } else if (isNaN(servings) || Number(servings) < 1) {
+      errs.servings = "At least 1 serving is required.";
+    }
+
+    if (!neededBy) {
+      errs.neededBy = "Preferred time is required.";
+    }
+
+    if (!deliveryLocation.trim()) {
+      errs.deliveryLocation = "Pickup location is required.";
+    }
+
+    setErrors(errs);
+    return errs;
+  };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -58,8 +91,10 @@ const RequestCraving = () => {
   };
 
   const handlePublish = async () => {
-    if (!dishName || !servings || !budget || !neededBy || !deliveryLocation) {
-      toast.error("Please fill in all required fields.");
+    const formErrors = validateForm();
+    if (Object.keys(formErrors).length > 0) {
+      const firstError = Object.values(formErrors)[0];
+      toast.error(firstError);
       return;
     }
 
@@ -73,11 +108,11 @@ const RequestCraving = () => {
         collegeName: userCollege,
         tag,
         isVeg,
-        dishName,
-        description,
+        dishName: dishName.trim(),
+        description: description.trim(),
         servings: Number(servings),
         price: Number(budget),
-        deliveryLocation,
+        deliveryLocation: deliveryLocation.trim(),
         neededBy,
         imageUrl: image || ''
       });
@@ -153,7 +188,14 @@ const RequestCraving = () => {
 
           {/* What do you want? */}
           <div className="mb-6">
-            <label className="block text-white text-[15px] font-serif mb-2">What do you want?</label>
+            <div className="flex justify-between items-baseline mb-2">
+              <label className="block text-white text-[15px] font-serif">What do you want? *</label>
+              {errors.dishName && (
+                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
+                  ⚠ {errors.dishName}
+                </span>
+              )}
+            </div>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -161,9 +203,14 @@ const RequestCraving = () => {
               <input 
                 type="text" 
                 placeholder="e.g., Dal Rice, Aloo Paratha, Biryani..."
-                className="w-full bg-transparent border border-white/40 rounded-lg py-3 pl-10 pr-4 text-[14px] text-white placeholder-white/60 focus:outline-none focus:border-white/80 transition-colors"
+                className={`w-full bg-transparent border rounded-lg py-3 pl-10 pr-4 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors ${
+                  errors.dishName ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
+                }`}
                 value={dishName}
-                onChange={(e) => setDishName(e.target.value)}
+                onChange={(e) => {
+                  setDishName(e.target.value);
+                  if (errors.dishName) setErrors((prev) => ({ ...prev, dishName: null }));
+                }}
               />
             </div>
           </div>
@@ -182,41 +229,77 @@ const RequestCraving = () => {
           {/* Servings, Budget, Preferred time */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <div>
-              <label className="block text-white text-[15px] font-serif mb-2">Servings</label>
+              <div className="flex justify-between items-baseline mb-2">
+                <label className="block text-white text-[15px] font-serif">Servings *</label>
+                {errors.servings && (
+                  <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
+                    ⚠ {errors.servings}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <input 
                   type="number" 
-                  className="w-full bg-transparent border border-white/40 rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none focus:border-white/80"
+                  className={`w-full bg-transparent border rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors ${
+                    errors.servings ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
+                  }`}
                   value={servings}
-                  onChange={(e) => setServings(e.target.value)}
+                  onChange={(e) => {
+                    setServings(e.target.value);
+                    if (errors.servings) setErrors((prev) => ({ ...prev, servings: null }));
+                  }}
                   placeholder="4"
                   min="1"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-white text-[15px] font-serif mb-2">Budget</label>
+              <div className="flex justify-between items-baseline mb-2">
+                <label className="block text-white text-[15px] font-serif">Budget (Min ₹10) *</label>
+                {errors.budget && (
+                  <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
+                    ⚠ {errors.budget}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 text-[15px] font-semibold">₹</span>
                 <input 
                   type="number" 
-                  className="w-full bg-transparent border border-white/40 rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none focus:border-white/80"
+                  className={`w-full bg-transparent border rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors ${
+                    errors.budget ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
+                  }`}
                   value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
+                  onChange={(e) => {
+                    setBudget(e.target.value);
+                    if (errors.budget) setErrors((prev) => ({ ...prev, budget: null }));
+                  }}
                   placeholder="150"
-                  min="0"
+                  min="10"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-white text-[15px] font-serif mb-2">Preferred time</label>
+              <div className="flex justify-between items-baseline mb-2">
+                <label className="block text-white text-[15px] font-serif">Preferred time *</label>
+                {errors.neededBy && (
+                  <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
+                    ⚠ {errors.neededBy}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <select 
-                  className="w-full bg-transparent border border-white/40 rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white focus:outline-none focus:border-white/80 appearance-none"
+                  className={`w-full bg-transparent border rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white focus:outline-none transition-colors appearance-none ${
+                    errors.neededBy ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
+                  }`}
                   value={neededBy}
-                  onChange={(e) => setNeededBy(e.target.value)}
+                  onChange={(e) => {
+                    setNeededBy(e.target.value);
+                    if (errors.neededBy) setErrors((prev) => ({ ...prev, neededBy: null }));
+                  }}
                 >
                   <option value="" className="text-black">Select time</option>
                   {(() => {
@@ -243,14 +326,26 @@ const RequestCraving = () => {
           
           {/* Pickup Location */}
           <div className="mb-8">
-            <label className="block text-white text-[15px] font-serif mb-2">Pickup Location</label>
+            <div className="flex justify-between items-baseline mb-2">
+              <label className="block text-white text-[15px] font-serif">Pickup Location *</label>
+              {errors.deliveryLocation && (
+                <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2.5 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
+                  ⚠ {errors.deliveryLocation}
+                </span>
+              )}
+            </div>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
               <input 
                 type="text" 
-                className="w-full bg-transparent border border-white/40 rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none focus:border-white/80"
+                className={`w-full bg-transparent border rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors ${
+                  errors.deliveryLocation ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
+                }`}
                 value={deliveryLocation}
-                onChange={(e) => setDeliveryLocation(e.target.value)}
+                onChange={(e) => {
+                  setDeliveryLocation(e.target.value);
+                  if (errors.deliveryLocation) setErrors((prev) => ({ ...prev, deliveryLocation: null }));
+                }}
                 placeholder="Hostel Block A, Gate 2..."
               />
             </div>

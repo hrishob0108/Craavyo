@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { useNavigate } from "react-router-dom";
@@ -29,7 +29,7 @@ function GOO() {
     signInWithPopup(auth, provider)
       .then(async (res) => {
         try {
-          // Check partitioned collections: hostelers, dayscholars, admins, with legacy fallback
+          // Check partitioned collections: hostelers, dayscholars strictly
           let profile = null;
           const hostelerSnap = await getDoc(doc(db, "hostelers", res.user.uid));
           if (hostelerSnap.exists()) {
@@ -39,19 +39,41 @@ function GOO() {
             if (dayscholarSnap.exists()) {
               profile = dayscholarSnap.data();
             } else {
+              // Check if this account belongs to an administrator
               const adminSnap = await getDoc(doc(db, "admins", res.user.uid));
-              if (adminSnap.exists()) {
-                profile = adminSnap.data();
-              } else {
-                const legacySnap = await getDoc(doc(db, "users", res.user.uid));
-                if (legacySnap.exists()) {
-                  profile = legacySnap.data();
+              const founderEmails = (
+                import.meta.env.VITE_FOUNDER_EMAILS ||
+                "hrishobp@gmail.com,naveenpavurala2005@gmail.com"
+              )
+                .split(",")
+                .map((em) => em.trim().toLowerCase());
+              const userEmail = (res.user.email || "").trim().toLowerCase();
+              const isFounder = founderEmails.includes(userEmail);
+
+              if (adminSnap.exists() || isFounder) {
+                await signOut(auth);
+                sessionStorage.removeItem("user");
+                sessionStorage.removeItem("currentUser");
+                toast.error(
+                  "Administrative accounts must log in via the Executive Command Center (/admin/login).",
+                  { duration: 6000 }
+                );
+                navigate("/admin/login");
+                return;
+              }
+
+              // Check legacy users collection strictly for student roles
+              const legacySnap = await getDoc(doc(db, "users", res.user.uid));
+              if (legacySnap.exists()) {
+                const legacyData = legacySnap.data();
+                if (["hosteler", "dayscholar"].includes(legacyData.role)) {
+                  profile = legacyData;
                 }
               }
             }
           }
 
-          if (profile && profile.role) {
+          if (profile && profile.role && ["hosteler", "dayscholar"].includes(profile.role)) {
             const token = await res.user.getIdToken();
             const currentUser = {
               _id: res.user.uid,

@@ -45,9 +45,10 @@ const App = () => {
     setCurrentUser(updatedUser);
   };
 
-  // Determine if onboarding modal should be shown
+  // Determine if onboarding modal should be shown (strictly for student accounts)
   const isAuthPage = ['/home', '/login', '/register', '/forgot-password', '/reset-password', '/admin/login', '/admin', '/'].includes(location.pathname);
-  const needsCollegeOnboarding = currentUser && (!currentUser.collegeName || !currentUser.collegeName.trim() || !currentUser.isPhoneVerified) && !isAuthPage;
+  const isStudent = currentUser && ['hosteler', 'dayscholar'].includes(currentUser.role);
+  const needsCollegeOnboarding = isStudent && (!currentUser.collegeName || !currentUser.collegeName.trim() || !currentUser.isPhoneVerified) && !isAuthPage;
 
   return (
     <>

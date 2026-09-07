@@ -54,6 +54,8 @@ const HostelerDashboard = () => {
     if (user.role !== 'hosteler') {
       if (user.role === 'dayscholar') {
         navigate('/dayscholar-dashboard');
+      } else if (['founder', 'national_head', 'state_head'].includes(user.role)) {
+        navigate('/admin');
       } else {
         navigate('/login');
       }

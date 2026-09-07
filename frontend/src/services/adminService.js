@@ -299,9 +299,6 @@ export const deleteAdminAccount = async (uid) => {
   if (!uid) throw new Error("Leader UID is required.");
   const adminDocRef = doc(db, "admins", uid);
   await deleteDoc(adminDocRef);
-  try {
-    await deleteDoc(doc(db, "users", uid));
-  } catch (e) {}
   return { success: true, uid };
 };
 
@@ -340,43 +337,32 @@ export const getAllOrdersForAdmin = async (filterState = "ALL") => {
  * Fetch all campus students (hostelers & dayscholars) for executive campus directory
  */
 export const getAllUsersForAdmin = async (filterState = "ALL") => {
-  const [hostelersSnap, dayscholarsSnap, legacySnap] = await Promise.all([
+  const [hostelersSnap, dayscholarsSnap] = await Promise.all([
     getDocs(collection(db, "hostelers")),
-    getDocs(collection(db, "dayscholars")),
-    getDocs(collection(db, "users"))
+    getDocs(collection(db, "dayscholars"))
   ]);
 
-  const usersMap = new Map();
+  const users = [
+    ...hostelersSnap.docs.map(d => ({ _id: d.id, id: d.id, ...d.data(), role: d.data().role || "hosteler" })),
+    ...dayscholarsSnap.docs.map(d => ({ _id: d.id, id: d.id, ...d.data(), role: d.data().role || "dayscholar" }))
+  ];
 
-  hostelersSnap.docs.forEach(d => usersMap.set(d.id, { _id: d.id, id: d.id, ...d.data(), role: d.data().role || "hosteler" }));
-  dayscholarsSnap.docs.forEach(d => usersMap.set(d.id, { _id: d.id, id: d.id, ...d.data(), role: d.data().role || "dayscholar" }));
-
-  // Include non-admin students from legacy users if any
-  legacySnap.docs.forEach(d => {
-    const data = d.data();
-    if (!["founder", "national_head", "state_head"].includes(data.role) && !usersMap.has(d.id)) {
-      usersMap.set(d.id, { _id: d.id, id: d.id, ...data });
-    }
-  });
-
-  let users = Array.from(usersMap.values());
-
+  let filtered = users;
   if (filterState && filterState !== "ALL") {
-    users = users.filter(u => (u.state || "").toLowerCase() === filterState.toLowerCase());
+    filtered = users.filter(u => (u.state || "").toLowerCase() === filterState.toLowerCase());
   }
-  return users.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  return filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 };
 
 /**
  * Calculate executive platform KPI metrics across partitions
  */
 export const getAdminMetrics = async (filterState = "ALL") => {
-  const [ordersSnap, mealsSnap, hostelersSnap, dayscholarsSnap, legacyUsersSnap, reviewsSnap] = await Promise.all([
+  const [ordersSnap, mealsSnap, hostelersSnap, dayscholarsSnap, reviewsSnap] = await Promise.all([
     getDocs(collection(db, "orders")),
     getDocs(collection(db, "meals")),
     getDocs(collection(db, "hostelers")),
     getDocs(collection(db, "dayscholars")),
-    getDocs(collection(db, "users")),
     getDocs(collection(db, "reviews"))
   ]);
 
@@ -387,13 +373,6 @@ export const getAdminMetrics = async (filterState = "ALL") => {
   const usersMap = new Map();
   hostelersSnap.docs.forEach(d => usersMap.set(d.id, { _id: d.id, ...d.data(), role: d.data().role || "hosteler" }));
   dayscholarsSnap.docs.forEach(d => usersMap.set(d.id, { _id: d.id, ...d.data(), role: d.data().role || "dayscholar" }));
-
-  legacyUsersSnap.docs.forEach(d => {
-    const data = d.data();
-    if (!["founder", "national_head", "state_head"].includes(data.role) && !usersMap.has(d.id)) {
-      usersMap.set(d.id, { _id: d.id, ...data });
-    }
-  });
 
   let users = Array.from(usersMap.values());
 

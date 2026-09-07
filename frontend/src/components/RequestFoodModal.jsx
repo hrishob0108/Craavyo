@@ -32,18 +32,42 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
     onClose();
   };
 
+  const validateField = (field, val) => {
+    let err = null;
+    if (field === 'dishName') {
+      if (!val || !val.trim()) err = "Dish name is required.";
+      else if (val.trim().length < 3) err = "Must be at least 3 characters.";
+    } else if (field === 'price') {
+      if (val === "" || val === undefined || val === null) err = "Budget is required (min ₹20).";
+      else if (isNaN(val)) err = "Please enter a valid amount.";
+      else if (Number(val) < 0) err = "Price cannot be negative.";
+      else if (Number(val) < 20) err = "Minimum price must be at least ₹20.";
+    } else if (field === 'neededBy') {
+      if (!val || !val.trim()) err = "Needed by time is required.";
+    } else if (field === 'deliveryLocation') {
+      if (!val || !val.trim()) err = "Delivery location is required.";
+      else if (val.trim().length < 3) err = "Must be at least 3 characters.";
+    }
+    setErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
   const validateForm = () => {
     const errs = {};
     if (!form.dishName.trim()) {
       errs.dishName = "Dish name is required.";
-    } else if (form.dishName.trim().length < 2) {
-      errs.dishName = "Must be at least 2 characters.";
+    } else if (form.dishName.trim().length < 3) {
+      errs.dishName = "Must be at least 3 characters.";
     }
 
     if (form.price === "" || form.price === undefined || form.price === null) {
-      errs.price = "Budget is required (min ₹10).";
-    } else if (isNaN(form.price) || Number(form.price) < 10) {
-      errs.price = "Minimum price must be at least ₹10.";
+      errs.price = "Budget is required (min ₹20).";
+    } else if (isNaN(form.price)) {
+      errs.price = "Please enter a valid amount.";
+    } else if (Number(form.price) < 0) {
+      errs.price = "Price cannot be negative.";
+    } else if (Number(form.price) < 20) {
+      errs.price = "Minimum price must be at least ₹20.";
     }
 
     if (!form.neededBy.trim()) {
@@ -52,6 +76,8 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
 
     if (!form.deliveryLocation.trim()) {
       errs.deliveryLocation = "Delivery location is required.";
+    } else if (form.deliveryLocation.trim().length < 3) {
+      errs.deliveryLocation = "Must be at least 3 characters.";
     }
 
     setErrors(errs);
@@ -160,16 +186,22 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                 </div>
                 <input
                   type="text"
-                  placeholder="e.g. Paneer Butter Masala & Roti"
+                  placeholder="e.g. Paneer Butter Masala & Roti (min 3 chars)"
                   value={form.dishName}
                   onChange={(e) => {
                     setForm({ ...form, dishName: e.target.value });
-                    if (errors.dishName) setErrors(prev => ({ ...prev, dishName: null }));
+                    validateField('dishName', e.target.value);
                   }}
+                  onBlur={(e) => validateField('dishName', e.target.value)}
                   className={`w-full px-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
                     errors.dishName ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
                   }`}
                 />
+                {errors.dishName && (
+                  <p className="text-red-600 text-xs font-semibold mt-1 ml-1 text-left flex items-center gap-1">
+                    ⚠ {errors.dishName}
+                  </p>
+                )}
               </div>
 
               {/* Description */}
@@ -203,18 +235,29 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                     <FiDollarSign className="absolute left-4 text-gray-400 font-bold" />
                     <input
                       type="number"
-                      placeholder="Min ₹10"
-                      min="10"
+                      placeholder="Min ₹20"
+                      min="20"
+                      onKeyDown={(e) => {
+                        if (e.key === '-' || e.key === 'e' || e.key === '+') {
+                          e.preventDefault();
+                        }
+                      }}
                       value={form.price}
                       onChange={(e) => {
                         setForm({ ...form, price: e.target.value });
-                        if (errors.price) setErrors(prev => ({ ...prev, price: null }));
+                        validateField('price', e.target.value);
                       }}
+                      onBlur={(e) => validateField('price', e.target.value)}
                       className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-bold text-base shadow-inner ${
                         errors.price ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
                       }`}
                     />
                   </div>
+                  {errors.price && (
+                    <p className="text-red-600 text-xs font-semibold mt-1 ml-1 text-left flex items-center gap-1">
+                      ⚠ {errors.price}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -236,13 +279,19 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                       value={form.neededBy}
                       onChange={(e) => {
                         setForm({ ...form, neededBy: e.target.value });
-                        if (errors.neededBy) setErrors(prev => ({ ...prev, neededBy: null }));
+                        validateField('neededBy', e.target.value);
                       }}
+                      onBlur={(e) => validateField('neededBy', e.target.value)}
                       className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
                         errors.neededBy ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
                       }`}
                     />
                   </div>
+                  {errors.neededBy && (
+                    <p className="text-red-600 text-xs font-semibold mt-1 ml-1 text-left flex items-center gap-1">
+                      ⚠ {errors.neededBy}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -266,13 +315,19 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                     value={form.deliveryLocation}
                     onChange={(e) => {
                       setForm({ ...form, deliveryLocation: e.target.value });
-                      if (errors.deliveryLocation) setErrors(prev => ({ ...prev, deliveryLocation: null }));
+                      validateField('deliveryLocation', e.target.value);
                     }}
+                    onBlur={(e) => validateField('deliveryLocation', e.target.value)}
                     className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
                       errors.deliveryLocation ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
                     }`}
                   />
                 </div>
+                {errors.deliveryLocation && (
+                  <p className="text-red-600 text-xs font-semibold mt-1 ml-1 text-left flex items-center gap-1">
+                    ⚠ {errors.deliveryLocation}
+                  </p>
+                )}
               </div>
 
               {/* Submit Button */}

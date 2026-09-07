@@ -20,8 +20,8 @@ import { db } from "../firebase";
  */
 export const createMeal = async (mealData) => {
   const priceNum = Number(mealData.price);
-  if (mealData.price === undefined || mealData.price === null || isNaN(priceNum) || priceNum < 10) {
-    throw new Error("Minimum price must be at least ₹10.");
+  if (mealData.price === undefined || mealData.price === null || isNaN(priceNum) || priceNum < 20) {
+    throw new Error("Minimum price must be at least â‚¹20.");
   }
 
   const mealsCol = collection(db, "meals");

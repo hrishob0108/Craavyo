@@ -23,23 +23,50 @@ const RequestCraving = () => {
   const [image, setImage] = useState('');
   const [errors, setErrors] = useState({});
 
+  const validateField = (field, val) => {
+    let err = null;
+    if (field === 'dishName') {
+      if (!val || !val.trim()) err = "Dish name is required.";
+      else if (val.trim().length < 3) err = "Must be at least 3 characters.";
+    } else if (field === 'budget') {
+      if (val === "" || val === undefined || val === null) err = "Budget is required (min ₹20).";
+      else if (isNaN(val)) err = "Please enter a valid amount.";
+      else if (Number(val) < 0) err = "Price cannot be negative.";
+      else if (Number(val) < 20) err = "Minimum price must be at least ₹20.";
+    } else if (field === 'servings') {
+      if (val === "" || val === undefined || val === null) err = "Servings is required.";
+      else if (isNaN(val) || Number(val) <= 0) err = "At least 1 serving is required.";
+    } else if (field === 'neededBy') {
+      if (!val) err = "Preferred time is required.";
+    } else if (field === 'deliveryLocation') {
+      if (!val || !val.trim()) err = "Pickup location is required.";
+      else if (val.trim().length < 3) err = "Must be at least 3 characters.";
+    }
+    setErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
   const validateForm = () => {
     const errs = {};
     if (!dishName.trim()) {
       errs.dishName = "Dish name is required.";
-    } else if (dishName.trim().length < 2) {
-      errs.dishName = "Dish name must be at least 2 characters.";
+    } else if (dishName.trim().length < 3) {
+      errs.dishName = "Must be at least 3 characters.";
     }
 
     if (budget === "" || budget === undefined || budget === null) {
-      errs.budget = "Budget is required (min ₹10).";
-    } else if (isNaN(budget) || Number(budget) < 10) {
-      errs.budget = "Minimum price must be at least ₹10.";
+      errs.budget = "Budget is required (min ₹20).";
+    } else if (isNaN(budget)) {
+      errs.budget = "Please enter a valid amount.";
+    } else if (Number(budget) < 0) {
+      errs.budget = "Price cannot be negative.";
+    } else if (Number(budget) < 20) {
+      errs.budget = "Minimum price must be at least ₹20.";
     }
 
-    if (servings === "" || servings === undefined) {
+    if (servings === "" || servings === undefined || servings === null) {
       errs.servings = "Servings is required.";
-    } else if (isNaN(servings) || Number(servings) < 1) {
+    } else if (isNaN(servings) || Number(servings) <= 0) {
       errs.servings = "At least 1 serving is required.";
     }
 
@@ -49,6 +76,8 @@ const RequestCraving = () => {
 
     if (!deliveryLocation.trim()) {
       errs.deliveryLocation = "Pickup location is required.";
+    } else if (deliveryLocation.trim().length < 3) {
+      errs.deliveryLocation = "Must be at least 3 characters.";
     }
 
     setErrors(errs);
@@ -202,17 +231,23 @@ const RequestCraving = () => {
               </span>
               <input 
                 type="text" 
-                placeholder="e.g., Dal Rice, Aloo Paratha, Biryani..."
+                placeholder="e.g., Dal Rice, Aloo Paratha, Biryani... (min 3 chars)"
                 className={`w-full bg-transparent border rounded-lg py-3 pl-10 pr-4 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors ${
                   errors.dishName ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
                 }`}
                 value={dishName}
                 onChange={(e) => {
                   setDishName(e.target.value);
-                  if (errors.dishName) setErrors((prev) => ({ ...prev, dishName: null }));
+                  validateField('dishName', e.target.value);
                 }}
+                onBlur={(e) => validateField('dishName', e.target.value)}
               />
             </div>
+            {errors.dishName && (
+              <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                ⚠ {errors.dishName}
+              </p>
+            )}
           </div>
 
           {/* Any special Instructions? */}
@@ -230,7 +265,7 @@ const RequestCraving = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <div>
               <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Servings *</label>
+                <label className="block text-white text-[15px] font-serif">Servings (Min 1) *</label>
                 {errors.servings && (
                   <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
                     ⚠ {errors.servings}
@@ -241,22 +276,33 @@ const RequestCraving = () => {
                 <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 w-4 h-4" />
                 <input 
                   type="number" 
+                  min="1"
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'e' || e.key === '.' || e.key === '+') {
+                      e.preventDefault();
+                    }
+                  }}
                   className={`w-full bg-transparent border rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors ${
                     errors.servings ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
                   }`}
                   value={servings}
                   onChange={(e) => {
                     setServings(e.target.value);
-                    if (errors.servings) setErrors((prev) => ({ ...prev, servings: null }));
+                    validateField('servings', e.target.value);
                   }}
-                  placeholder="4"
-                  min="1"
+                  onBlur={(e) => validateField('servings', e.target.value)}
+                  placeholder="1"
                 />
               </div>
+              {errors.servings && (
+                <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                  ⚠ {errors.servings}
+                </p>
+              )}
             </div>
             <div>
               <div className="flex justify-between items-baseline mb-2">
-                <label className="block text-white text-[15px] font-serif">Budget (Min ₹10) *</label>
+                <label className="block text-white text-[15px] font-serif">Budget (Min ₹20) *</label>
                 {errors.budget && (
                   <span className="text-red-200 text-xs font-semibold bg-red-900/60 px-2 py-0.5 rounded-full border border-red-400/50 flex items-center gap-1 animate-pulse">
                     ⚠ {errors.budget}
@@ -267,18 +313,29 @@ const RequestCraving = () => {
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 text-[15px] font-semibold">₹</span>
                 <input 
                   type="number" 
+                  placeholder="Min 20"
+                  min="20"
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'e' || e.key === '+') {
+                      e.preventDefault();
+                    }
+                  }}
                   className={`w-full bg-transparent border rounded-lg py-2.5 pl-9 pr-3 text-[14px] text-white placeholder-white/60 focus:outline-none transition-colors ${
                     errors.budget ? 'border-red-400 ring-2 ring-red-400/30' : 'border-white/40 focus:border-white/80'
                   }`}
                   value={budget}
                   onChange={(e) => {
                     setBudget(e.target.value);
-                    if (errors.budget) setErrors((prev) => ({ ...prev, budget: null }));
+                    validateField('budget', e.target.value);
                   }}
-                  placeholder="150"
-                  min="10"
+                  onBlur={(e) => validateField('budget', e.target.value)}
                 />
               </div>
+              {errors.budget && (
+                <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                  ⚠ {errors.budget}
+                </p>
+              )}
             </div>
             <div>
               <div className="flex justify-between items-baseline mb-2">
@@ -298,8 +355,9 @@ const RequestCraving = () => {
                   value={neededBy}
                   onChange={(e) => {
                     setNeededBy(e.target.value);
-                    if (errors.neededBy) setErrors((prev) => ({ ...prev, neededBy: null }));
+                    validateField('neededBy', e.target.value);
                   }}
+                  onBlur={(e) => validateField('neededBy', e.target.value)}
                 >
                   <option value="" className="text-black">Select time</option>
                   {(() => {
@@ -321,6 +379,11 @@ const RequestCraving = () => {
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
               </div>
+              {errors.neededBy && (
+                <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                  ⚠ {errors.neededBy}
+                </p>
+              )}
             </div>
           </div>
           
@@ -344,11 +407,17 @@ const RequestCraving = () => {
                 value={deliveryLocation}
                 onChange={(e) => {
                   setDeliveryLocation(e.target.value);
-                  if (errors.deliveryLocation) setErrors((prev) => ({ ...prev, deliveryLocation: null }));
+                  validateField('deliveryLocation', e.target.value);
                 }}
+                onBlur={(e) => validateField('deliveryLocation', e.target.value)}
                 placeholder="Hostel Block A, Gate 2..."
               />
             </div>
+            {errors.deliveryLocation && (
+              <p className="text-red-200 text-xs font-semibold mt-1.5 ml-1 text-left flex items-center gap-1">
+                ⚠ {errors.deliveryLocation}
+              </p>
+            )}
           </div>
 
           {/* Photo Upload */}

@@ -20,6 +20,11 @@ import { db } from "../firebase";
  * Create a new delivery order with 4-digit security OTP
  */
 export const createOrder = async (orderData) => {
+  const priceNum = Number(orderData.price);
+  if (orderData.price === undefined || orderData.price === null || isNaN(priceNum) || priceNum < 10) {
+    throw new Error("Minimum price must be at least ₹10.");
+  }
+
   const ordersCol = collection(db, "orders");
   const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -29,7 +34,7 @@ export const createOrder = async (orderData) => {
     sellerId: orderData.sellerId || orderData.cookId,
     mealId: orderData.mealId || null,
     dishName: orderData.dishName || "Home-Cooked Meal",
-    price: Number(orderData.price) || 0,
+    price: priceNum,
     imageUrl: orderData.imageUrl || "",
     deliveryLocation: orderData.deliveryLocation || "Hostel Room Delivery",
     collegeName: (orderData.collegeName || "").trim(),

@@ -50,6 +50,7 @@ const DayscholarDashboard = () => {
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [isPostDishModalOpen, setIsPostDishModalOpen] = useState(false);
   const [postDishForm, setPostDishForm] = useState({ title: '', price: '', image: '', tag: 'New', isVeg: true });
+  const [postDishErrors, setPostDishErrors] = useState({});
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   
@@ -167,14 +168,33 @@ const DayscholarDashboard = () => {
 
   const handlePublish = async (e) => {
      e.preventDefault();
-     if(!postDishForm.title || !postDishForm.price) return toast.error("Title and Price are required.");
-     
+     const errs = {};
+     if (!postDishForm.title?.trim()) {
+       errs.title = "Dish name is required.";
+     } else if (postDishForm.title.trim().length < 2) {
+       errs.title = "Dish name must be at least 2 characters.";
+     }
+
+     if (postDishForm.price === "" || postDishForm.price === undefined || postDishForm.price === null) {
+       errs.price = "Price is required (min ₹10).";
+     } else if (isNaN(postDishForm.price) || Number(postDishForm.price) < 10) {
+       errs.price = "Minimum price must be at least ₹10.";
+     }
+
+     if (Object.keys(errs).length > 0) {
+       setPostDishErrors(errs);
+       toast.error(Object.values(errs)[0]);
+       return;
+     }
+
+     setPostDishErrors({});
      setIsPublishing(true);
      try {
        const userCollege = (user?.collegeName || "").trim();
        const userId = user._id || user.uid;
        await createMeal({
          ...postDishForm,
+         price: Number(postDishForm.price),
          collegeName: userCollege,
          cookName: user.name,
          createdBy: userId
@@ -323,9 +343,14 @@ const DayscholarDashboard = () => {
 
       <PostDishModal 
         isOpen={isPostDishModalOpen} 
-        onClose={() => setIsPostDishModalOpen(false)} 
+        onClose={() => {
+          setIsPostDishModalOpen(false);
+          setPostDishErrors({});
+        }} 
         form={postDishForm} 
         setForm={setPostDishForm} 
+        errors={postDishErrors}
+        setErrors={setPostDishErrors}
         onSubmit={handlePublish} 
         isPublishing={isPublishing} 
       />
@@ -1225,7 +1250,7 @@ const OrderRequests = ({ requests, onUpdateStatus, actionLoadingId }) => (
   </motion.div>
 );
 
-const PostDishModal = ({ isOpen, onClose, form, setForm, onSubmit, isPublishing }) => {
+const PostDishModal = ({ isOpen, onClose, form, setForm, errors, setErrors, onSubmit, isPublishing }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -1235,15 +1260,62 @@ const PostDishModal = ({ isOpen, onClose, form, setForm, onSubmit, isPublishing 
           <button onClick={onClose} className="p-2 bg-white/50 hover:bg-white border border-[#D66E73]/30 rounded-full text-[#5D3234] transition-colors cursor-pointer"><FiX /></button>
         </div>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <input type="text" placeholder="Dish Name (e.g. Rajma Chawal)" className="w-full px-4 py-3 border border-[#D66E73]/30 rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium" value={form.title} onChange={e => setForm({...form, title: e.target.value})} autoFocus />
+          <div className="flex flex-col gap-1">
+            <div className="flex justify-between items-baseline">
+              <label className="text-xs font-bold text-[#5D3234]">Dish Name *</label>
+              {errors?.title && (
+                <span className="text-red-700 text-[11px] font-semibold bg-red-100 px-2 py-0.5 rounded-md border border-red-300 animate-pulse">
+                  ⚠ {errors.title}
+                </span>
+              )}
+            </div>
+            <input 
+              type="text" 
+              placeholder="Dish Name (e.g. Rajma Chawal)" 
+              className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium transition-colors ${
+                errors?.title ? 'border-red-500 ring-2 ring-red-400/30' : 'border-[#D66E73]/30'
+              }`} 
+              value={form.title} 
+              onChange={e => {
+                setForm({...form, title: e.target.value});
+                if (errors?.title) setErrors(prev => ({ ...prev, title: null }));
+              }} 
+              autoFocus 
+            />
+          </div>
           <div className="flex gap-3">
-             <input type="number" placeholder="Price (₹)" className="w-full px-4 py-3 border border-[#D66E73]/30 rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
-             <select className="w-full px-4 py-3 border border-[#D66E73]/30 rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
-                <option value="New">New</option>
-                <option value="Bestseller">Bestseller</option>
-                <option value="Spicy">Spicy</option>
-                <option value="Sweet">Sweet</option>
-             </select>
+             <div className="w-1/2 flex flex-col gap-1">
+                <div className="flex justify-between items-baseline">
+                  <label className="text-xs font-bold text-[#5D3234]">Price (₹) *</label>
+                  {errors?.price && (
+                    <span className="text-red-700 text-[11px] font-semibold bg-red-100 px-2 py-0.5 rounded-md border border-red-300 animate-pulse">
+                      ⚠ {errors.price}
+                    </span>
+                  )}
+                </div>
+                <input 
+                  type="number" 
+                  placeholder="Min ₹10" 
+                  min="10"
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium transition-colors ${
+                    errors?.price ? 'border-red-500 ring-2 ring-red-400/30' : 'border-[#D66E73]/30'
+                  }`} 
+                  value={form.price} 
+                  onChange={e => {
+                    setForm({...form, price: e.target.value});
+                    if (errors?.price) setErrors(prev => ({ ...prev, price: null }));
+                  }} 
+                />
+             </div>
+             <div className="w-1/2 flex flex-col gap-1">
+                <label className="text-xs font-bold text-[#5D3234]">Tag</label>
+                <select className="w-full px-4 py-2.5 border border-[#D66E73]/30 rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
+                   <option value="New">New</option>
+                   <option value="Bestseller">Bestseller</option>
+                   <option value="Spicy">Spicy</option>
+                   <option value="Sweet">Sweet</option>
+                </select>
+             </div>
           </div>
           <div className="flex flex-col gap-2 bg-white/50 p-3 rounded-xl border border-[#D66E73]/20">
              <label className="text-sm font-bold text-[#5D3234] flex items-center gap-2">

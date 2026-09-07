@@ -22,6 +22,11 @@ import { createOrder } from "./orderService";
  * Hosteler posts a custom food craving request
  */
 export const createFoodRequest = async (requestData) => {
+  const priceNum = Number(requestData.price);
+  if (requestData.price === undefined || requestData.price === null || isNaN(priceNum) || priceNum < 10) {
+    throw new Error("Minimum price must be at least ₹10.");
+  }
+
   const foodReqCol = collection(db, "foodRequests");
   const payload = {
     buyerId: requestData.buyerId,
@@ -31,7 +36,7 @@ export const createFoodRequest = async (requestData) => {
     dishName: requestData.dishName || "",
     description: requestData.description || "",
     servings: Number(requestData.servings) || 1,
-    price: Number(requestData.price) || 0,
+    price: priceNum,
     imageUrl: requestData.imageUrl || "",
     deliveryLocation: requestData.deliveryLocation || "",
     collegeName: (requestData.collegeName || "").trim(),

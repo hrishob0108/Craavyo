@@ -61,15 +61,6 @@ function GOO() {
                 navigate("/admin/login");
                 return;
               }
-
-              // Check legacy users collection strictly for student roles
-              const legacySnap = await getDoc(doc(db, "users", res.user.uid));
-              if (legacySnap.exists()) {
-                const legacyData = legacySnap.data();
-                if (["hosteler", "dayscholar"].includes(legacyData.role)) {
-                  profile = legacyData;
-                }
-              }
             }
           }
 

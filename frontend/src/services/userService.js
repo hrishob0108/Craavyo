@@ -45,16 +45,6 @@ export const getUserProfile = async (uid) => {
     return { _id: uid, uid, ...dayscholarSnap.data(), role: dayscholarSnap.data().role || "dayscholar" };
   }
 
-  // 3. Legacy users fallback (strictly for student roles only)
-  const legacyRef = doc(db, "users", uid);
-  const legacySnap = await getDoc(legacyRef);
-  if (legacySnap.exists()) {
-    const data = legacySnap.data();
-    if (["hosteler", "dayscholar"].includes(data.role)) {
-      return { _id: uid, uid, ...data };
-    }
-  }
-
   return null;
 };
 

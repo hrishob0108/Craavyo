@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiHome, FiUser, FiShoppingCart, FiSearch, FiClock, FiPackage, FiStar, FiLogOut, FiTrendingUp, FiMapPin, FiArrowRight, FiX, FiBell, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiRepeat, FiLoader } from 'react-icons/fi';
+import { FiHome, FiUser, FiShoppingCart, FiSearch, FiClock, FiPackage, FiStar, FiLogOut, FiTrendingUp, FiMapPin, FiArrowRight, FiX, FiBell, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiRepeat, FiLoader, FiRadio } from 'react-icons/fi';
 import { FaUtensils, FaHeart, FaStar, FaGraduationCap } from 'react-icons/fa';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -11,9 +11,11 @@ import {
   getMyReviews, 
   deleteFoodRequest, 
   createOrder, 
-  getSellerStats 
+  getSellerStats,
+  listenActiveBroadcastsForUser 
 } from '../../services/firestoreService';
 import ReviewModal from '../../components/ReviewModal';
+import CampusBroadcastBanner from '../../components/CampusBroadcastBanner';
 import defaultMealImage from '../../assets/image.png';
 
 // Animation configs
@@ -38,6 +40,7 @@ const HostelerDashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState("All");
   const [notifications, setNotifications] = useState([]);
+  const [broadcasts, setBroadcasts] = useState([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [orderingMealId, setOrderingMealId] = useState(null);
   const [selectedProofUrl, setSelectedProofUrl] = useState(null);
@@ -102,12 +105,18 @@ const HostelerDashboard = () => {
       setMyOrders(liveOrders);
     });
 
-    // 3. Fetch custom requests & reviews
+    // 3. Setup real-time listener for Campus Broadcasts
+    const unsubscribeBroadcasts = listenActiveBroadcastsForUser(user, (liveBroadcasts) => {
+      setBroadcasts(liveBroadcasts);
+    });
+
+    // 4. Fetch custom requests & reviews
     fetchDashboardData();
 
     return () => {
       unsubscribeMeals();
       unsubscribeOrders();
+      unsubscribeBroadcasts();
     };
   }, []);
 
@@ -195,6 +204,7 @@ const HostelerDashboard = () => {
         navigate={navigate} 
         notifications={notifications} 
         setNotifications={setNotifications} 
+        broadcasts={broadcasts}
         isNotifOpen={isNotifOpen} 
         setIsNotifOpen={setIsNotifOpen} 
         isProfileMenuOpen={isProfileMenuOpen}
@@ -205,6 +215,9 @@ const HostelerDashboard = () => {
 
       <main className="relative z-10 pt-[140px] px-4 sm:px-6 lg:px-12 max-w-[1440px] mx-auto">
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
+          {/* Non-intrusive Emergency Alert Banner (Only appears if urgent broadcast is active) */}
+          <CampusBroadcastBanner broadcasts={broadcasts} />
+
           <WelcomeBanner user={user} onRequestCustom={() => navigate('/request-craving')} />
           
           <div className="mt-[80px]">
@@ -255,7 +268,7 @@ const HostelerDashboard = () => {
 };
 
 // Sub-components
-const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, setIsNotifOpen, isProfileMenuOpen, setIsProfileMenuOpen, searchQuery, setSearchQuery }) => {
+const Header = ({ user, navigate, notifications, setNotifications, broadcasts = [], isNotifOpen, setIsNotifOpen, isProfileMenuOpen, setIsProfileMenuOpen, searchQuery, setSearchQuery }) => {
   const handleLogout = () => {
     sessionStorage.removeItem('currentUser');
     sessionStorage.removeItem('user');
@@ -263,6 +276,8 @@ const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, 
     toast.success("Successfully logged out");
     navigate('/login');
   };
+
+  const totalNotifCount = (notifications?.length || 0) + (broadcasts?.length || 0);
 
   return (
     <div className="fixed top-6 left-0 right-0 z-50 flex justify-center w-full px-6 md:px-12 pointer-events-none">
@@ -315,7 +330,7 @@ const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, 
               className="text-[#4D2B2B]/70 hover:text-[#8C3F3F] relative flex items-center justify-center cursor-pointer transition-colors p-2"
             >
               <FiBell className="w-6 h-6 stroke-[1.5]"/>
-              {notifications && notifications.length > 0 && (
+              {totalNotifCount > 0 && (
                 <span className="absolute top-1.5 right-2 w-2.5 h-2.5 bg-[#8C3F3F] rounded-full border-[2px] border-white animate-pulse"></span>
               )}
             </motion.button>
@@ -326,25 +341,80 @@ const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, 
                   initial={{ opacity: 0, y: 15, scale: 0.95 }} 
                   animate={{ opacity: 1, y: 0, scale: 1 }} 
                   exit={{ opacity: 0, y: 15, scale: 0.95 }} 
-                  className="absolute right-0 mt-4 w-80 bg-white/95 backdrop-blur-xl border border-primary/10 shadow-2xl rounded-2xl p-4 z-50 overflow-hidden"
+                  className="absolute right-0 mt-4 w-80 md:w-96 bg-white/95 backdrop-blur-xl border border-[#8C3F3F]/15 shadow-2xl rounded-2xl p-4 z-50 overflow-hidden"
                 >
-                  <div className="flex justify-between items-center pb-2 border-b border-primary/10 mb-2">
-                    <span className="font-black text-sm text-espresso">Notifications</span>
+                  <div className="flex justify-between items-center pb-2 border-b border-[#8C3F3F]/10 mb-3">
+                    <span className="font-black text-sm text-[#4D2B2B]">Notifications</span>
                     {notifications && notifications.length > 0 && (
-                      <button onClick={() => setNotifications([])} className="text-[10px] font-black text-primary hover:text-primary-hover bg-primary/10 px-2 py-1 rounded cursor-pointer">Clear All</button>
+                      <button onClick={() => setNotifications([])} className="text-[10px] font-black text-[#8C3F3F] hover:text-[#732A2A] bg-[#8C3F3F]/10 px-2 py-1 rounded cursor-pointer">Clear Activity</button>
                     )}
                   </div>
-                  <ul className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
-                    {!notifications || notifications.length === 0 ? (
-                      <li className="text-center py-6 text-xs text-espresso-light/60 font-semibold">No new notifications.</li>
-                    ) : (
-                      notifications.map(n => (
-                        <li key={n.id} className="text-xs font-semibold text-espresso-light p-2.5 bg-cream/40 border border-primary/5 rounded-lg text-left leading-relaxed">
-                          {n.text}
-                        </li>
-                      ))
-                    )}
-                  </ul>
+
+                  {/* Campus Broadcasts Section (If Any) */}
+                  {broadcasts && broadcasts.length > 0 && (
+                    <div className="mb-3 pb-3 border-b border-[#8C3F3F]/10">
+                      <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-[#8C3F3F] mb-2">
+                        <FiRadio className="w-3.5 h-3.5" />
+                        Campus Announcements ({broadcasts.length})
+                      </div>
+                      <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
+                        {broadcasts.map(b => {
+                          const isUrgent = b.priority === "urgent";
+                          const isCelebration = b.priority === "celebration";
+                          return (
+                            <div 
+                              key={b._id || b.id} 
+                              className={`p-2.5 rounded-xl border text-left leading-relaxed ${
+                                isUrgent 
+                                  ? "bg-[#8C3F3F]/10 border-[#8C3F3F]/30" 
+                                  : isCelebration
+                                  ? "bg-amber-500/10 border-amber-500/30"
+                                  : "bg-[#FFF8F2] border-[#E8D9CF]"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-1 mb-1">
+                                <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
+                                  isUrgent 
+                                    ? "bg-[#8C3F3F] text-white" 
+                                    : isCelebration
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-[#4D2B2B]/10 text-[#4D2B2B]"
+                                }`}>
+                                  {isUrgent ? "🚨 Urgent" : isCelebration ? "🎉 Celebration" : "📢 Notice"}
+                                </span>
+                                <span className="text-[10px] text-[#4D2B2B]/60 font-semibold truncate max-w-[140px]">
+                                  {b.targetCollege !== "ALL" ? b.targetCollege : "Campus-wide"}
+                                </span>
+                              </div>
+                              <p className="text-xs font-bold text-[#4D2B2B]">{b.title}</p>
+                              <p className="text-[11px] text-[#4D2B2B]/80 mt-0.5">{b.message}</p>
+                              <p className="text-[9px] text-[#4D2B2B]/50 font-medium mt-1">
+                                By {b.createdByName || "Campus Leadership"}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Regular Order & Activity Notifications */}
+                  <div>
+                    <div className="text-[11px] font-bold text-[#4D2B2B]/60 uppercase tracking-wider mb-2">
+                      Recent Activity
+                    </div>
+                    <ul className="space-y-2 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
+                      {!notifications || notifications.length === 0 ? (
+                        <li className="text-center py-4 text-xs text-[#4D2B2B]/50 font-medium">No recent activity.</li>
+                      ) : (
+                        notifications.map(n => (
+                          <li key={n.id} className="text-xs font-semibold text-[#4D2B2B]/80 p-2.5 bg-[#FFF8F2] border border-[#E8D9CF] rounded-xl text-left leading-relaxed">
+                            {n.text}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

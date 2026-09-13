@@ -9,7 +9,7 @@ import {
   onSnapshot,
   serverTimestamp 
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 
 // ==========================================
 // MEALS & DISHES SERVICE
@@ -19,9 +19,14 @@ import { db } from "../firebase";
  * Create a new home-cooked dish listed by a Day Scholar
  */
 export const createMeal = async (mealData) => {
+  const currentUid = auth.currentUser?.uid;
+  const createdBy = currentUid || mealData.createdBy;
+  if (!createdBy) {
+    throw new Error("You must be logged in as a Dayscholar cook to list a dish.");
+  }
   const priceNum = Number(mealData.price);
   if (mealData.price === undefined || mealData.price === null || isNaN(priceNum) || priceNum < 20) {
-    throw new Error("Minimum price must be at least â‚¹20.");
+    throw new Error("Minimum price must be at least ₹20.");
   }
 
   const mealsCol = collection(db, "meals");
@@ -39,7 +44,7 @@ export const createMeal = async (mealData) => {
     dishes: mealData.dishes || [],
     cookName: mealData.cookName || "Chef",
     collegeName: (mealData.collegeName || "").trim(),
-    createdBy: mealData.createdBy,
+    createdBy: createdBy,
     rating: 4.8,
     createdAt: serverTimestamp(),
   };

@@ -24,6 +24,8 @@ import {
   FiLoader,
   FiEdit2,
   FiTrash2,
+  FiDownload,
+  FiRadio,
 } from "react-icons/fi";
 import {
   getAdminMetrics,
@@ -33,10 +35,19 @@ import {
   getFlaggedReviews,
   updateAdminStatus,
   deleteAdminAccount,
+  getAllMealsForAdmin,
+  getAllFoodRequestsForAdmin,
+  getCampusBroadcasts,
+  adminOverrideOrder,
 } from "../../services/firestoreService";
 import collegesHierarchy from "../../data/collegesHierarchy.json";
 import AdminCreateHeadModal from "../../components/Admin/AdminCreateHeadModal";
 import AdminEditHeadModal from "../../components/Admin/AdminEditHeadModal";
+import AdminStudentsTab from "../../components/Admin/AdminStudentsTab";
+import AdminMealsTab from "../../components/Admin/AdminMealsTab";
+import AdminCravingsTab from "../../components/Admin/AdminCravingsTab";
+import AdminFinancialsTab from "../../components/Admin/AdminFinancialsTab";
+import AdminBroadcastTab from "../../components/Admin/AdminBroadcastTab";
 import toast from "react-hot-toast";
 
 const AdminDashboard = () => {
@@ -68,9 +79,13 @@ const AdminDashboard = () => {
   // Data states
   const [metrics, setMetrics] = useState(null);
   const [team, setTeam] = useState([]);
+  const [fullTeam, setFullTeam] = useState([]);
   const [orders, setOrders] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [flaggedReviews, setFlaggedReviews] = useState([]);
+  const [meals, setMeals] = useState([]);
+  const [cravings, setCravings] = useState([]);
+  const [broadcasts, setBroadcasts] = useState([]);
 
   // Modals & Inspection
   const [isCreateHeadOpen, setIsCreateHeadOpen] = useState(false);
@@ -80,6 +95,11 @@ const AdminDashboard = () => {
   const [previewProofUrl, setPreviewProofUrl] = useState(null);
   const [campusSearchQuery, setCampusSearchQuery] = useState("");
   const [orderSearchQuery, setOrderSearchQuery] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
+  const [overridingOrder, setOverridingOrder] = useState(null);
+  const [overrideStatus, setOverrideStatus] = useState("Cancelled");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [isOverriding, setIsOverriding] = useState(false);
 
   // All States list
   const statesList = useMemo(() => {
@@ -107,19 +127,37 @@ const AdminDashboard = () => {
     try {
       const activeStateFilter = admin?.role === "state_head" ? admin.assignedState : selectedState;
 
-      const [metricsData, teamData, ordersData, usersData, reviewsData] = await Promise.all([
+      const [
+        metricsData,
+        teamData,
+        allTeamData,
+        ordersData,
+        usersData,
+        reviewsData,
+        mealsData,
+        cravingsData,
+        broadcastsData,
+      ] = await Promise.all([
         getAdminMetrics(activeStateFilter),
         admin?.role === "state_head" ? Promise.resolve([]) : getAdminTeam(activeStateFilter),
+        admin?.role === "state_head" ? Promise.resolve([]) : getAdminTeam("ALL"),
         getAllOrdersForAdmin(activeStateFilter),
         getAllUsersForAdmin(activeStateFilter),
         getFlaggedReviews(activeStateFilter),
+        getAllMealsForAdmin(activeStateFilter),
+        getAllFoodRequestsForAdmin(activeStateFilter),
+        getCampusBroadcasts(activeStateFilter),
       ]);
 
       setMetrics(metricsData);
       setTeam(teamData);
+      setFullTeam(allTeamData);
       setOrders(ordersData);
       setUsersList(usersData);
       setFlaggedReviews(reviewsData);
+      setMeals(mealsData);
+      setCravings(cravingsData);
+      setBroadcasts(broadcastsData);
     } catch (err) {
       console.error("Admin Load Error:", err);
       toast.error("Failed to refresh operational metrics.");
@@ -219,17 +257,104 @@ const AdminDashboard = () => {
     return colleges.filter((c) => c.name.toLowerCase().includes(q)).sort((a, b) => b.count - a.count);
   }, [metrics?.collegeMap, campusSearchQuery]);
 
-  // Filtered Orders based on search
+  // Filtered Orders based on search & status filter
   const filteredOrders = useMemo(() => {
-    if (!orderSearchQuery.trim()) return orders;
-    const q = orderSearchQuery.toLowerCase();
-    return orders.filter(
-      (o) =>
+    return orders.filter((o) => {
+      // Status filter
+      if (orderStatusFilter !== "ALL") {
+        if (orderStatusFilter === "Declined" && !["Declined", "Cancelled"].includes(o.status)) return false;
+        else if (orderStatusFilter !== "Declined" && o.status !== orderStatusFilter) return false;
+      }
+      if (!orderSearchQuery.trim()) return true;
+      const q = orderSearchQuery.toLowerCase();
+      return (
         (o.dishName || "").toLowerCase().includes(q) ||
         (o.buyerName || "").toLowerCase().includes(q) ||
-        (o.collegeName || "").toLowerCase().includes(q)
-    );
-  }, [orders, orderSearchQuery]);
+        (o.collegeName || "").toLowerCase().includes(q) ||
+        (o.deliveryLocation || "").toLowerCase().includes(q) ||
+        (o.otp || "").includes(q) ||
+        (o._id || "").toLowerCase().includes(q)
+      );
+    });
+  }, [orders, orderStatusFilter, orderSearchQuery]);
+
+  // CSV Export Utility for Orders
+  const handleExportOrdersCSV = () => {
+    if (!orders || orders.length === 0) {
+      toast.error("No orders available to export.");
+      return;
+    }
+
+    const headers = [
+      "Order ID",
+      "Date",
+      "Dish Name",
+      "Price (INR)",
+      "Buyer Name",
+      "College Campus",
+      "State",
+      "Delivery Spot",
+      "Order Status",
+      "Delivery OTP",
+      "OTP Verified",
+      "Cook Proof Attached",
+      "Delivery Proof Attached",
+    ];
+
+    const rows = orders.map((o) => [
+      `"${o._id || o.id || ""}"`,
+      `"${o.createdAt?.seconds ? new Date(o.createdAt.seconds * 1000).toLocaleString() : ""}"`,
+      `"${(o.dishName || "").replace(/"/g, '""')}"`,
+      o.price || 0,
+      `"${(o.buyerName || "").replace(/"/g, '""')}"`,
+      `"${(o.collegeName || "").replace(/"/g, '""')}"`,
+      `"${(o.state || "").replace(/"/g, '""')}"`,
+      `"${(o.deliveryLocation || "").replace(/"/g, '""')}"`,
+      `"${o.status || ""}"`,
+      `"${o.otp || ""}"`,
+      o.isOtpVerified ? "YES" : "NO",
+      o.cookingProofImageUrl ? "YES" : "NO",
+      o.handoverProofImageUrl ? "YES" : "NO",
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `craavyo_orders_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`Exported ${orders.length} orders to CSV spreadsheet!`);
+  };
+
+  // Order Override Handler
+  const handleConfirmOrderOverride = async () => {
+    if (!overridingOrder) return;
+    setIsOverriding(true);
+    try {
+      await adminOverrideOrder(
+        overridingOrder._id || overridingOrder.id,
+        overrideStatus,
+        overrideReason,
+        admin
+      );
+      toast.success(`Order status updated to ${overrideStatus}.`);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o._id === overridingOrder._id ? { ...o, status: overrideStatus } : o
+        )
+      );
+      setOverridingOrder(null);
+      setOverrideReason("");
+    } catch (err) {
+      console.error("Override order error:", err);
+      toast.error("Failed to override order status.");
+    } finally {
+      setIsOverriding(false);
+    }
+  };
 
   const getRoleBadge = (role, state) => {
     if (role === "founder") {
@@ -413,18 +538,23 @@ const AdminDashboard = () => {
         <section className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
           <div className="flex flex-wrap items-center gap-2">
             {[
-              { id: "analytics", label: "📊 Overview & Analytics" },
+              { id: "analytics", label: "📊 Overview" },
               ...(admin.role !== "state_head"
-                ? [{ id: "team", label: "👥 Leadership & State Heads" }]
+                ? [{ id: "team", label: "👥 Leaders" }]
                 : []),
-              { id: "orders", label: "🍱 Live Orders & Food Proofs" },
-              { id: "campuses", label: "🎓 College Directory" },
-              { id: "disputes", label: "⚠️ Quality & Disputes" },
+              { id: "students", label: "🧑‍🎓 Students" },
+              { id: "orders", label: "🍱 Live Orders" },
+              { id: "meals", label: "🍲 Menu" },
+              { id: "cravings", label: "🍛 Cravings" },
+              { id: "financials", label: "💰 Financials" },
+              { id: "broadcast", label: "📢 Broadcasts" },
+              { id: "campuses", label: "🎓 Campuses" },
+              { id: "disputes", label: "⚠️ Disputes" },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === tab.id
                     ? "bg-[#8C3F3F] text-white shadow-md shadow-[#8C3F3F]/30 border border-[#E8AE68]/30"
                     : "bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/5"
@@ -643,6 +773,64 @@ const AdminDashboard = () => {
           </section>
         )}
 
+        {/* Tab: Student Directory */}
+        {activeTab === "students" && (
+          <AdminStudentsTab
+            students={usersList}
+            currentAdmin={admin}
+            onStudentUpdated={(updatedStudent) => {
+              setUsersList((prev) =>
+                prev.map((s) => (s._id === updatedStudent._id ? updatedStudent : s))
+              );
+            }}
+          />
+        )}
+
+        {/* Tab: Menu Moderation */}
+        {activeTab === "meals" && (
+          <AdminMealsTab
+            meals={meals}
+            currentAdmin={admin}
+            onMealDeleted={(delId) => {
+              setMeals((prev) => prev.filter((m) => m._id !== delId && m.id !== delId));
+            }}
+          />
+        )}
+
+        {/* Tab: Custom Cravings */}
+        {activeTab === "cravings" && (
+          <AdminCravingsTab
+            cravings={cravings}
+            currentAdmin={admin}
+            onCravingDeleted={(delId) => {
+              setCravings((prev) => prev.filter((c) => c._id !== delId && c.id !== delId));
+            }}
+          />
+        )}
+
+        {/* Tab: Financial Insights & Cook Payouts */}
+        {activeTab === "financials" && (
+          <AdminFinancialsTab
+            orders={orders}
+            users={usersList}
+            filterState={selectedState}
+          />
+        )}
+
+        {/* Tab: Campus Broadcast Alerts */}
+        {activeTab === "broadcast" && (
+          <AdminBroadcastTab
+            broadcasts={broadcasts}
+            currentAdmin={admin}
+            onBroadcastCreated={(newB) => {
+              setBroadcasts((prev) => [newB, ...prev]);
+            }}
+            onBroadcastDeleted={(delId) => {
+              setBroadcasts((prev) => prev.filter((b) => b._id !== delId && b.id !== delId));
+            }}
+          />
+        )}
+
         {/* Tab 3: Live Orders & Food Proofs */}
         {activeTab === "orders" && (
           <section className="space-y-4 text-left">
@@ -656,24 +844,60 @@ const AdminDashboard = () => {
                 </p>
               </div>
 
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-72">
-                <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
-                <input
-                  type="text"
-                  value={orderSearchQuery}
-                  onChange={(e) => setOrderSearchQuery(e.target.value)}
-                  placeholder="Search dish, student, campus..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#E8AE68]"
-                />
+              {/* Search & CSV Export Bar */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64">
+                  <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 text-xs" />
+                  <input
+                    type="text"
+                    value={orderSearchQuery}
+                    onChange={(e) => setOrderSearchQuery(e.target.value)}
+                    placeholder="Search dish, student, OTP..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#E8AE68]"
+                  />
+                </div>
+
+                <button
+                  onClick={handleExportOrdersCSV}
+                  className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-[#E8AE68] border border-white/10 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                  title="Download CSV spreadsheet of all orders"
+                >
+                  <FiDownload className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Export CSV</span>
+                </button>
               </div>
             </div>
 
+            {/* Status Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {[
+                { id: "ALL", label: `All (${orders.length})` },
+                { id: "Pending", label: `⏳ Pending (${orders.filter((o) => o.status === "Pending").length})` },
+                { id: "Preparing", label: `🍳 Cooking (${orders.filter((o) => o.status === "Preparing").length})` },
+                { id: "Out for Delivery", label: `🛵 Out (${orders.filter((o) => o.status === "Out for Delivery").length})` },
+                { id: "Delivered", label: `✅ Delivered (${orders.filter((o) => o.status === "Delivered").length})` },
+                { id: "Declined", label: `✕ Cancelled (${orders.filter((o) => ["Declined", "Cancelled"].includes(o.status)).length})` },
+              ].map((pill) => (
+                <button
+                  key={pill.id}
+                  onClick={() => setOrderStatusFilter(pill.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    orderStatusFilter === pill.id
+                      ? "bg-[#8C3F3F] text-white border border-[#E8AE68]/30 shadow-md"
+                      : "bg-white/5 hover:bg-white/10 text-white/50 hover:text-white border border-white/5"
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Orders Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredOrders.slice(0, 30).map((ord) => (
+              {filteredOrders.slice(0, 50).map((ord) => (
                 <div
                   key={ord._id}
-                  className="bg-[#1C0E11] border border-[#421A1E] rounded-3xl p-5 flex flex-col justify-between gap-4 text-xs"
+                  className="bg-[#1C0E11] border border-[#421A1E] rounded-3xl p-5 flex flex-col justify-between gap-4 text-xs hover:border-[#8C3F3F]/40 transition-colors"
                 >
                   <div>
                     <div className="flex justify-between items-start mb-2">
@@ -683,6 +907,8 @@ const AdminDashboard = () => {
                             ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                             : ord.status === "Preparing"
                             ? "bg-orange-500/20 text-orange-300 border-orange-500/30"
+                            : ["Declined", "Cancelled"].includes(ord.status)
+                            ? "bg-red-500/20 text-red-300 border-red-500/30"
                             : "bg-blue-500/20 text-blue-300 border-blue-500/30"
                         }`}
                       >
@@ -702,18 +928,23 @@ const AdminDashboard = () => {
                         🎓 {ord.collegeName}
                       </p>
                     )}
+                    {ord.adminOverridden && (
+                      <p className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 mt-2">
+                        🛡️ Admin Override: {ord.adminOverrideReason}
+                      </p>
+                    )}
                   </div>
 
-                  {/* Photo Proof Inspections */}
+                  {/* Photo Proof Inspections & Actions */}
                   <div className="pt-3 border-t border-white/10 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       {ord.cookingProofImageUrl ? (
                         <button
                           onClick={() => setPreviewProofUrl(ord.cookingProofImageUrl)}
-                          className="flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 cursor-pointer"
+                          className="flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/30 cursor-pointer"
                         >
                           <FiCamera className="w-3 h-3" />
-                          <span>Cook Proof</span>
+                          <span>Cook</span>
                         </button>
                       ) : (
                         <span className="text-[10px] text-white/30 italic">No cook photo</span>
@@ -722,17 +953,33 @@ const AdminDashboard = () => {
                       {ord.handoverProofImageUrl && (
                         <button
                           onClick={() => setPreviewProofUrl(ord.handoverProofImageUrl)}
-                          className="flex items-center gap-1 text-[11px] font-bold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/30 cursor-pointer"
+                          className="flex items-center gap-1 text-[11px] font-bold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/30 cursor-pointer"
                         >
                           <FiCheckCircle className="w-3 h-3" />
-                          <span>Delivery Proof</span>
+                          <span>Delivery</span>
                         </button>
                       )}
                     </div>
 
-                    <span className="text-[10px] font-mono text-white/40">
-                      OTP: {ord.otp || "----"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-white/40">
+                        OTP: {ord.otp || "----"}
+                      </span>
+
+                      {/* Admin Override Action */}
+                      <button
+                        onClick={() => {
+                          setOverridingOrder(ord);
+                          setOverrideStatus("Cancelled");
+                          setOverrideReason("");
+                        }}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-[11px] font-bold border border-white/10 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Force Cancel or Force Deliver this order"
+                      >
+                        <FiEdit2 className="w-3 h-3 text-[#E8AE68]" />
+                        <span>Action</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -851,9 +1098,12 @@ const AdminDashboard = () => {
         isOpen={isCreateHeadOpen}
         onClose={() => setIsCreateHeadOpen(false)}
         currentAdminRole={admin?.role}
-        existingTeam={team}
+        currentAdmin={admin}
+        existingTeam={fullTeam.length > 0 ? fullTeam : team}
         onHeadCreated={(newAdmin) => {
           setTeam((prev) => [newAdmin, ...prev]);
+          setFullTeam((prev) => [newAdmin, ...prev]);
+          loadDashboardData();
         }}
       />
 
@@ -863,18 +1113,23 @@ const AdminDashboard = () => {
         onClose={() => setEditingLeader(null)}
         leader={editingLeader}
         currentAdminRole={admin?.role}
-        existingTeam={team}
+        currentAdmin={admin}
+        existingTeam={fullTeam.length > 0 ? fullTeam : team}
         onHeadUpdated={(updatedLeader) => {
           setTeam((prev) =>
             prev.map((m) => (m._id === updatedLeader._id ? updatedLeader : m))
           );
+          setFullTeam((prev) =>
+            prev.map((m) => (m._id === updatedLeader._id ? updatedLeader : m))
+          );
+          loadDashboardData();
         }}
       />
 
       {/* Modal: Confirm Permanent Delete */}
       <AnimatePresence>
         {deletingLeader && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -930,12 +1185,115 @@ const AdminDashboard = () => {
         )}
       </AnimatePresence>
 
+      {/* Modal: Order Administrative Override */}
+      <AnimatePresence>
+        {overridingOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-md bg-[#1E1113] border border-[#6B3135] rounded-3xl p-6 sm:p-7 shadow-2xl text-white text-left relative"
+            >
+              <button
+                onClick={() => setOverridingOrder(null)}
+                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition-colors cursor-pointer"
+              >
+                <FiX className="w-4 h-4" />
+              </button>
+
+              <div className="w-12 h-12 rounded-2xl bg-[#8C3F3F]/30 border border-[#8C3F3F]/50 text-[#E8AE68] flex items-center justify-center text-2xl mb-4">
+                <FiShield />
+              </div>
+
+              <h3 className="text-xl font-serif font-bold text-white mb-1">
+                Administrative Order Override
+              </h3>
+              <p className="text-xs text-white/60 mb-4 leading-relaxed">
+                Order for <strong className="text-white">"{overridingOrder.dishName}"</strong> (Buyer: {overridingOrder.buyerName}, ₹{overridingOrder.price})
+              </p>
+
+              <div className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-white/80 uppercase tracking-wider mb-1.5">
+                    Target Status
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOverrideStatus("Cancelled")}
+                      className={`py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        overrideStatus === "Cancelled"
+                          ? "bg-red-600/30 border-red-500 text-red-300"
+                          : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
+                      }`}
+                    >
+                      Force Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOverrideStatus("Delivered")}
+                      className={`py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        overrideStatus === "Delivered"
+                          ? "bg-emerald-600/30 border-emerald-500 text-emerald-300"
+                          : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
+                      }`}
+                    >
+                      Force Mark Delivered
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-white/80 uppercase tracking-wider mb-1.5">
+                    Reason for Override *
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    placeholder="e.g. Cook failed to prepare; student verified delivery offline..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#E8AE68]"
+                  ></textarea>
+                </div>
+
+                <div className="pt-2 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setOverridingOrder(null)}
+                    className="w-1/2 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isOverriding}
+                    onClick={handleConfirmOrderOverride}
+                    className="w-1/2 py-2.5 rounded-xl bg-gradient-to-r from-[#8C3F3F] to-[#E8AE68] hover:opacity-95 text-white font-bold text-xs shadow-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isOverriding ? (
+                      <>
+                        <FiLoader className="w-3.5 h-3.5 animate-spin" /> Updating...
+                      </>
+                    ) : (
+                      <>
+                        <FiCheckCircle className="w-3.5 h-3.5" /> Apply Override
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Modal: Fullscreen Photo Proof Inspection */}
       <AnimatePresence>
         {previewProofUrl && (
           <div
             onClick={() => setPreviewProofUrl(null)}
-            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}

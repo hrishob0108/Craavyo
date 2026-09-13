@@ -16,7 +16,7 @@ import {
   FiAlertCircle,
   FiAlertTriangle,
 } from "react-icons/fi";
-import { createAdminAccount } from "../../services/firestoreService";
+import { createAdminAccount } from "../../services/adminService";
 import collegesHierarchy from "../../data/collegesHierarchy.json";
 import toast from "react-hot-toast";
 
@@ -25,6 +25,7 @@ const AdminCreateHeadModal = ({
   onClose,
   onHeadCreated,
   currentAdminRole,
+  currentAdmin,
   existingTeam = [],
 }) => {
   const [name, setName] = useState("");
@@ -37,6 +38,25 @@ const AdminCreateHeadModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
+  const [formNotification, setFormNotification] = useState(null); // { type: 'error'|'success'|'info', message: '' }
+
+  // Auto-dismiss on-form notification
+  useEffect(() => {
+    if (!formNotification) return;
+    const timer = setTimeout(() => {
+      setFormNotification(null);
+    }, formNotification.type === "error" ? 8000 : 5000);
+    return () => clearTimeout(timer);
+  }, [formNotification]);
+
+  // Clear errors and notifications when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setFormNotification(null);
+      setErrors({});
+      setTouched({});
+    }
+  }, [isOpen]);
 
   // Extract all states from collegesHierarchy.json
   const statesList = useMemo(() => {
@@ -141,10 +161,11 @@ const AdminCreateHeadModal = ({
     }
 
     // Phone Validation (Optional)
-    let cleanPhone = (fieldValues.phone || "").trim().replace(/[\s+-]/g, "");
+    let cleanPhone = (fieldValues.phone || "").trim().replace(/[\s-]/g, "");
     if (cleanPhone.startsWith("+91")) cleanPhone = cleanPhone.slice(3);
     else if (cleanPhone.startsWith("91") && cleanPhone.length === 12) cleanPhone = cleanPhone.slice(2);
     else if (cleanPhone.startsWith("0") && cleanPhone.length === 11) cleanPhone = cleanPhone.slice(1);
+    cleanPhone = cleanPhone.replace(/\D/g, "");
 
     if (cleanPhone) {
       if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
@@ -168,6 +189,8 @@ const AdminCreateHeadModal = ({
     if (field === "assignedState") setAssignedState(value);
     if (field === "phone") setPhone(value);
 
+    if (formNotification) setFormNotification(null);
+
     // Live clear error if field is touched
     if (touched[field]) {
       const updatedValues = {
@@ -185,16 +208,29 @@ const AdminCreateHeadModal = ({
   };
 
   const generateRandomPassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
-    let pass = "";
-    for (let i = 0; i < 10; i++) {
-      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    const uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const lowers = "abcdefghijkmnpqrstuvwxyz";
+    const nums = "23456789";
+    const syms = "!@#$%";
+    const all = uppers + lowers + nums + syms;
+    
+    let pass = [
+      uppers[Math.floor(Math.random() * uppers.length)],
+      lowers[Math.floor(Math.random() * lowers.length)],
+      nums[Math.floor(Math.random() * nums.length)],
+      syms[Math.floor(Math.random() * syms.length)],
+    ];
+    for (let i = 0; i < 6; i++) {
+      pass.push(all[Math.floor(Math.random() * all.length)]);
     }
-    setPassword(pass);
-    if (errors.password) {
-      setErrors((prev) => ({ ...prev, password: null }));
-    }
-    toast.success("Strong 10-character password generated!");
+    const generated = pass.sort(() => Math.random() - 0.5).join("");
+    setPassword(generated);
+    setTouched((prev) => ({ ...prev, password: true }));
+    setErrors((prev) => ({ ...prev, password: null }));
+    setFormNotification({
+      type: "success",
+      message: "Strong 10-character password generated and set!",
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -207,21 +243,26 @@ const AdminCreateHeadModal = ({
       phone: true,
     });
 
+    setFormNotification(null);
     const validationErrors = validate();
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
       const firstError = Object.values(validationErrors)[0];
-      toast.error(firstError);
+      setFormNotification({
+        type: "error",
+        message: firstError,
+      });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      let cleanPhone = (phone || "").trim().replace(/[\s+-]/g, "");
+      let cleanPhone = (phone || "").trim().replace(/[\s-]/g, "");
       if (cleanPhone.startsWith("+91")) cleanPhone = cleanPhone.slice(3);
       else if (cleanPhone.startsWith("91") && cleanPhone.length === 12) cleanPhone = cleanPhone.slice(2);
       else if (cleanPhone.startsWith("0") && cleanPhone.length === 11) cleanPhone = cleanPhone.slice(1);
+      cleanPhone = cleanPhone.replace(/\D/g, "");
 
       const newAdmin = await createAdminAccount({
         name: name.trim(),
@@ -230,21 +271,30 @@ const AdminCreateHeadModal = ({
         role,
         assignedState: role === "national_head" ? "ALL" : assignedState,
         phone: cleanPhone,
+        createdBy: currentAdmin?.uid || "founder",
+        createdByName: currentAdmin?.name || "Founder & CEO",
       });
 
-      toast.success(`Head account provisioned for ${name}! Credentials active.`);
+      setFormNotification({
+        type: "success",
+        message: `Success! Leadership credentials provisioned for ${name.trim()}.`,
+      });
+
       if (onHeadCreated) onHeadCreated(newAdmin);
 
-      // Reset form
-      setName("");
-      setEmail("");
-      setPassword("");
-      setRole("state_head");
-      setAssignedState("");
-      setPhone("");
-      setErrors({});
-      setTouched({});
-      onClose();
+      setTimeout(() => {
+        setName("");
+        setEmail("");
+        setPassword("");
+        setRole("state_head");
+        setAssignedState("");
+        setPhone("");
+        setErrors({});
+        setTouched({});
+        setFormNotification(null);
+        onClose();
+        toast.success(`Head account provisioned for ${name.trim()}! Credentials active.`);
+      }, 700);
     } catch (err) {
       console.error("Admin Creation Error:", err);
       let msg = err.message || "Failed to create head account.";
@@ -253,11 +303,16 @@ const AdminCreateHeadModal = ({
       } else if (err.code === "auth/weak-password" || msg.includes("weak-password")) {
         msg = "The chosen password is too weak. Please include letters and numbers.";
       } else if (err.code === "auth/invalid-email" || msg.includes("invalid-email")) {
-        msg = "The email address format is invalid.";
+        msg = "The official email address format is invalid.";
       } else if (err.code === "auth/operation-not-allowed") {
         msg = "Email/password provider is not enabled in Firebase Console.";
+      } else if (err.code === "auth/network-request-failed") {
+        msg = "Network connection failed. Please verify your internet connection.";
       }
-      toast.error(msg, { duration: 5000 });
+      setFormNotification({
+        type: "error",
+        message: msg,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -267,7 +322,7 @@ const AdminCreateHeadModal = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto select-none">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto select-none">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -276,7 +331,10 @@ const AdminCreateHeadModal = ({
         >
           {/* Close button */}
           <button
-            onClick={onClose}
+            onClick={() => {
+              setFormNotification(null);
+              onClose();
+            }}
             className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition-colors cursor-pointer"
           >
             <FiX className="w-5 h-5" />
@@ -297,6 +355,54 @@ const AdminCreateHeadModal = ({
             </div>
           </div>
 
+          {/* Dedicated On-Form Notification Banner (Directly on the Form) */}
+          <AnimatePresence>
+            {formNotification && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                className={`mb-5 p-4 rounded-2xl border text-xs flex items-start gap-3 shadow-xl transition-all ${
+                  formNotification.type === "error"
+                    ? "bg-red-500/20 border-red-500/50 text-red-100 shadow-red-950/40"
+                    : formNotification.type === "success"
+                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-100 shadow-emerald-950/40"
+                    : "bg-amber-500/20 border-amber-500/50 text-amber-100 shadow-amber-950/40"
+                }`}
+              >
+                {formNotification.type === "error" && (
+                  <FiAlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                )}
+                {formNotification.type === "success" && (
+                  <FiCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                )}
+                {formNotification.type === "info" && (
+                  <FiKey className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <p className="font-bold text-sm tracking-wide">
+                    {formNotification.type === "error"
+                      ? "Action Required"
+                      : formNotification.type === "success"
+                      ? "Success"
+                      : "Notice"}
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-90 leading-relaxed font-medium">
+                    {formNotification.message}
+                  </p>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setFormNotification(null)} 
+                  className="text-white/50 hover:text-white text-sm cursor-pointer p-1 rounded-lg hover:bg-white/10 transition-colors"
+                  title="Dismiss notification"
+                >
+                  ✕
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <form onSubmit={handleSubmit} className="space-y-4 text-left" noValidate>
             {/* Role Selector */}
             <div>
@@ -308,6 +414,7 @@ const AdminCreateHeadModal = ({
                   type="button"
                   onClick={() => {
                     setRole("state_head");
+                    if (assignedState === "ALL") setAssignedState("");
                     setErrors((prev) => ({ ...prev, assignedState: null }));
                   }}
                   className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
@@ -319,7 +426,7 @@ const AdminCreateHeadModal = ({
                   <span>🏛️</span> State Head
                 </button>
 
-                {currentAdminRole === "founder" && (
+                {(currentAdminRole === "founder" || currentAdminRole === "founder_ceo") && (
                   <button
                     type="button"
                     onClick={() => {

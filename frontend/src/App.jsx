@@ -54,8 +54,22 @@ const App = () => {
     <>
       <Toaster 
         position="top-center" 
+        containerStyle={{
+          zIndex: 99999999,
+          top: 24,
+        }}
         toastOptions={{ 
-          style: { background: '#111827', color: '#fff', borderRadius: '1rem', fontWeight: 'bold' },
+          style: { 
+            background: '#1E1113', 
+            color: '#fff', 
+            borderRadius: '1rem', 
+            fontWeight: 'bold',
+            border: '1px solid rgba(232, 174, 104, 0.4)',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6)',
+            padding: '12px 20px',
+            fontSize: '14px',
+            zIndex: 99999999,
+          },
           success: { iconTheme: { primary: '#10B981', secondary: '#fff' } },
           error: { iconTheme: { primary: '#EF4444', secondary: '#fff' } }
         }} 

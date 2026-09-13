@@ -11,7 +11,7 @@ import {
   onSnapshot,
   serverTimestamp 
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { createOrder } from "./orderService";
 
 // ==========================================
@@ -22,6 +22,11 @@ import { createOrder } from "./orderService";
  * Hosteler posts a custom food craving request
  */
 export const createFoodRequest = async (requestData) => {
+  const currentUid = auth.currentUser?.uid;
+  const buyerId = currentUid || requestData.buyerId;
+  if (!buyerId) {
+    throw new Error("You must be logged in to post a craving request.");
+  }
   const priceNum = Number(requestData.price);
   if (requestData.price === undefined || requestData.price === null || isNaN(priceNum) || priceNum < 20) {
     throw new Error("Minimum price must be at least ₹20.");
@@ -29,7 +34,7 @@ export const createFoodRequest = async (requestData) => {
 
   const foodReqCol = collection(db, "foodRequests");
   const payload = {
-    buyerId: requestData.buyerId,
+    buyerId: buyerId,
     buyerName: requestData.buyerName || "Hosteler",
     tag: requestData.tag || "Lunch",
     isVeg: requestData.isVeg !== undefined ? requestData.isVeg : true,

@@ -13,8 +13,11 @@ import {
   FiAlertTriangle,
   FiEdit,
   FiActivity,
+  FiKey,
 } from "react-icons/fi";
-import { updateAdminProfile } from "../../services/firestoreService";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "../../firebase";
+import { updateAdminProfile } from "../../services/adminService";
 import collegesHierarchy from "../../data/collegesHierarchy.json";
 import toast from "react-hot-toast";
 
@@ -23,6 +26,7 @@ const AdminEditHeadModal = ({
   onClose,
   leader,
   currentAdminRole,
+  currentAdmin,
   existingTeam = [],
   onHeadUpdated,
 }) => {
@@ -32,8 +36,19 @@ const AdminEditHeadModal = ({
   const [phone, setPhone] = useState("");
   const [status, setStatus] = useState("active");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
+  const [formNotification, setFormNotification] = useState(null); // { type: 'error'|'success'|'info', message: '' }
+
+  // Auto-dismiss on-form notification
+  useEffect(() => {
+    if (!formNotification) return;
+    const timer = setTimeout(() => {
+      setFormNotification(null);
+    }, formNotification.type === "error" ? 8000 : 5000);
+    return () => clearTimeout(timer);
+  }, [formNotification]);
 
   // Populate form fields on leader change
   useEffect(() => {
@@ -45,6 +60,7 @@ const AdminEditHeadModal = ({
       setStatus(leader.status || "active");
       setErrors({});
       setTouched({});
+      setFormNotification(null);
     }
   }, [leader]);
 
@@ -156,21 +172,26 @@ const AdminEditHeadModal = ({
       phone: true,
     });
 
+    setFormNotification(null);
     const validationErrors = validate();
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
       const firstError = Object.values(validationErrors)[0];
-      toast.error(firstError);
+      setFormNotification({
+        type: "error",
+        message: firstError,
+      });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      let cleanPhone = (phone || "").trim().replace(/[\s+-]/g, "");
+      let cleanPhone = (phone || "").trim().replace(/[\s-]/g, "");
       if (cleanPhone.startsWith("+91")) cleanPhone = cleanPhone.slice(3);
       else if (cleanPhone.startsWith("91") && cleanPhone.length === 12) cleanPhone = cleanPhone.slice(2);
       else if (cleanPhone.startsWith("0") && cleanPhone.length === 11) cleanPhone = cleanPhone.slice(1);
+      cleanPhone = cleanPhone.replace(/\D/g, "");
 
       const updated = await updateAdminProfile(leader._id, {
         name: name.trim(),
@@ -180,19 +201,53 @@ const AdminEditHeadModal = ({
         status: status,
       });
 
-      toast.success(`Updated leadership profile for ${name}!`);
+      setFormNotification({
+        type: "success",
+        message: `Success! Leadership profile updated for ${name.trim()}.`,
+      });
+
       if (onHeadUpdated) {
         onHeadUpdated({
           ...leader,
           ...updated,
         });
       }
-      onClose();
+
+      setTimeout(() => {
+        setFormNotification(null);
+        onClose();
+        toast.success(`Leadership profile updated for ${name.trim()}!`);
+      }, 700);
     } catch (err) {
       console.error("Update Leader Error:", err);
-      toast.error(err.message || "Failed to update leader profile.");
+      const msg = err.message || "Failed to update leader profile.";
+      setFormNotification({
+        type: "error",
+        message: msg,
+      });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSendLeaderResetEmail = async () => {
+    if (!leader?.email) return;
+    setIsSendingReset(true);
+    try {
+      await sendPasswordResetEmail(auth, leader.email.trim().toLowerCase());
+      setFormNotification({
+        type: "success",
+        message: `Official password reset link sent to ${leader.email}! They can use the link to set a new password.`,
+      });
+      toast.success(`Reset link sent to ${leader.email}`);
+    } catch (err) {
+      console.error("Leader password reset error:", err);
+      setFormNotification({
+        type: "error",
+        message: `Failed to dispatch reset email: ${err.message}`,
+      });
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -200,7 +255,7 @@ const AdminEditHeadModal = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto select-none">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto select-none">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -209,7 +264,10 @@ const AdminEditHeadModal = ({
         >
           {/* Close button */}
           <button
-            onClick={onClose}
+            onClick={() => {
+              setFormNotification(null);
+              onClose();
+            }}
             className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition-colors cursor-pointer"
           >
             <FiX className="w-5 h-5" />
@@ -229,6 +287,49 @@ const AdminEditHeadModal = ({
               </p>
             </div>
           </div>
+
+          {/* Dedicated On-Form Notification Banner (Directly on Form) */}
+          <AnimatePresence>
+            {formNotification && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                className={`mb-5 p-4 rounded-2xl border text-xs flex items-start gap-3 shadow-xl transition-all ${
+                  formNotification.type === "error"
+                    ? "bg-red-500/20 border-red-500/50 text-red-100 shadow-red-950/40"
+                    : formNotification.type === "success"
+                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-100 shadow-emerald-950/40"
+                    : "bg-amber-500/20 border-amber-500/50 text-amber-100 shadow-amber-950/40"
+                }`}
+              >
+                {formNotification.type === "error" && (
+                  <FiAlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                )}
+                {formNotification.type === "success" && (
+                  <FiCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <p className="font-bold text-sm tracking-wide">
+                    {formNotification.type === "error"
+                      ? "Action Required"
+                      : "Success"}
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-90 leading-relaxed font-medium">
+                    {formNotification.message}
+                  </p>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setFormNotification(null)} 
+                  className="text-white/50 hover:text-white text-sm cursor-pointer p-1 rounded-lg hover:bg-white/10 transition-colors"
+                  title="Dismiss notification"
+                >
+                  ✕
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <form onSubmit={handleSubmit} className="space-y-4 text-left" noValidate>
             {/* Account Email (Read-only) */}
@@ -262,6 +363,7 @@ const AdminEditHeadModal = ({
                   type="button"
                   onClick={() => {
                     setRole("state_head");
+                    if (assignedState === "ALL") setAssignedState("");
                     setErrors((prev) => ({ ...prev, assignedState: null }));
                   }}
                   className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
@@ -273,7 +375,7 @@ const AdminEditHeadModal = ({
                   <span>🏛️</span> State Head
                 </button>
 
-                {currentAdminRole === "founder" && (
+                {(currentAdminRole === "founder" || currentAdminRole === "founder_ceo") && (
                   <button
                     type="button"
                     onClick={() => {
@@ -398,6 +500,36 @@ const AdminEditHeadModal = ({
                   <FiAlertCircle className="w-3.5 h-3.5 shrink-0" /> {errors.phone}
                 </p>
               )}
+            </div>
+
+            {/* Password Management & Reset Link */}
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <FiKey className="text-[#E8AE68]" />
+                  <span>Credential Management</span>
+                </p>
+                <p className="text-[11px] text-white/50 mt-0.5 leading-relaxed">
+                  Send an encrypted password reset link to <strong className="text-white/80">{leader.email}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isSendingReset}
+                onClick={handleSendLeaderResetEmail}
+                className="px-3 py-1.5 rounded-xl bg-[#8C3F3F]/30 hover:bg-[#8C3F3F]/50 text-[#E8AE68] border border-[#8C3F3F]/50 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shrink-0 flex items-center gap-1.5"
+                title="Send official password reset link to this leader"
+              >
+                {isSendingReset ? (
+                  <>
+                    <FiLoader className="w-3.5 h-3.5 animate-spin" /> Sending...
+                  </>
+                ) : (
+                  <>
+                    <FiMail className="w-3.5 h-3.5" /> Dispatch Reset Link
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Status Selector */}

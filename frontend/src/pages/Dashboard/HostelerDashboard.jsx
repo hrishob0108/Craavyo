@@ -218,7 +218,11 @@ const HostelerDashboard = () => {
           {/* Non-intrusive Emergency Alert Banner (Only appears if urgent broadcast is active) */}
           <CampusBroadcastBanner broadcasts={broadcasts} />
 
-          <WelcomeBanner user={user} onRequestCustom={() => navigate('/request-craving')} />
+          <WelcomeBanner 
+            user={user} 
+            onRequestCustom={() => navigate('/request-craving')} 
+            onBrowseMenu={() => navigate('/all-meals')}
+          />
           
           <div className="mt-[80px]">
             <AvailableToday 
@@ -465,7 +469,7 @@ const Header = ({ user, navigate, notifications, setNotifications, broadcasts = 
   );
 };
 
-const WelcomeBanner = ({ user, onRequestCustom }) => {
+const WelcomeBanner = ({ user, onRequestCustom, onBrowseMenu }) => {
   const firstName = user?.name?.split(' ')[0] || 'Maggie';
   return (
     <motion.div variants={itemVariants} className="mb-10 w-full relative bg-[linear-gradient(90deg,#C45257_0%,#D63447_46%,#FADBB0_91%)] rounded-[30px] overflow-hidden flex flex-col md:flex-row shadow-xl">
@@ -502,7 +506,7 @@ const WelcomeBanner = ({ user, onRequestCustom }) => {
            <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => document.getElementById('craaving-section')?.scrollIntoView({ behavior: 'smooth' })}
+              onClick={onBrowseMenu}
               className="bg-transparent border border-white text-white font-semibold px-7 py-3.5 rounded-[999px] text-[16px] hover:bg-white hover:text-[#4D2B2B] transition-all flex items-center gap-2 cursor-pointer"
            >
               Browse menu <FiChevronRight />

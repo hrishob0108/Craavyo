@@ -5,7 +5,6 @@ import { FiCheck, FiArrowRight, FiCheckCircle, FiLock, FiSmartphone, FiLoader, F
 import { RecaptchaVerifier, linkWithPhoneNumber, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../firebase";
 import toast from "react-hot-toast";
-import api from "../services/api";
 import { saveCollegeOnboarding } from "../services/firestoreService";
 import collegesHierarchy from "../data/collegesHierarchy.json";
 
@@ -193,7 +192,7 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
       setResendTimer(30);
       toast.success(`SMS OTP sent via Firebase to ${formattedPhone}! Check your phone.`, { duration: 7000 });
     } catch (err) {
-      console.warn("Firebase Phone Auth error, falling back to backend SMS service:", err);
+      console.warn("Firebase Phone Auth error:", err);
       if (window.recaptchaVerifier) {
         try {
           window.recaptchaVerifier.clear();
@@ -205,30 +204,25 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
         container.innerHTML = "";
       }
 
-      // Fallback: Dispatch OTP using Backend SMS Service
-      try {
-        const res = await api.post("/auth/send-phone-otp", { phone: cleanPhone });
-        window.confirmationResult = null; // Mark as backend-dispatched
-        setOtpSent(true);
-        setResendTimer(30);
-        setErrorMsg("");
-        if (res.data?.isRealSms) {
-          toast.success(`Real SMS OTP dispatched to +91 ${cleanPhone}! Check your messages.`, { duration: 8000 });
-        } else {
-          toast.success(`OTP generated for +91 ${cleanPhone}! (Check backend console / SMS)`, { duration: 8000 });
-        }
-      } catch (backendErr) {
-        console.error("Backend OTP Dispatch Error:", backendErr);
-        const msg = backendErr.response?.data?.message || err?.message || "Failed to send SMS OTP. Please check your network or server.";
-        setErrorMsg(msg);
-        toast.error(msg, { duration: 9000 });
+      let errorNotice = "Failed to send SMS OTP. Please check your phone number.";
+      if (err.code === "auth/invalid-phone-number") {
+        errorNotice = "Please enter a valid 10-digit Indian mobile number (+91).";
+      } else if (err.code === "auth/too-many-requests") {
+        errorNotice = "Too many OTP requests. Please wait a bit before requesting again.";
+      } else if (err.code === "auth/quota-exceeded") {
+        errorNotice = "SMS quota limit reached. Please try again in a few moments.";
+      } else if (err.message) {
+        errorNotice = err.message;
       }
+
+      setErrorMsg(errorNotice);
+      toast.error(errorNotice, { duration: 8000 });
     } finally {
       setIsSendingOtp(false);
     }
   };
 
-  // Handle Verify Mobile SMS OTP
+  // Handle Verify Mobile SMS OTP via Firebase Auth
   const handleVerifyOtp = async () => {
     const cleanPhone = sanitizePhoneNumber(phone);
     const cleanOtp = otpInput.replace(/\D/g, "");
@@ -245,52 +239,30 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
     setIsVerifyingOtp(true);
     setErrorMsg("");
 
-    // 1. If Firebase confirmation session is active
-    if (window.confirmationResult) {
-      try {
-        const result = await window.confirmationResult.confirm(cleanOtp);
-        if (result && (result.user || result)) {
-          setIsPhoneVerified(true);
-          setOtpSent(false);
-          setResendTimer(0);
-          setErrorMsg("");
-          toast.success("Phone number verified successfully with Firebase!");
-          setIsVerifyingOtp(false);
-          return;
-        }
-      } catch (fbErr) {
-        console.warn("Firebase confirmation failed:", fbErr);
-        setErrorMsg("Invalid OTP code. Please check the code sent to your phone.");
-        toast.error("Invalid OTP code. Please try again.");
-      } finally {
-        setIsVerifyingOtp(false);
-      }
+    if (!window.confirmationResult) {
+      setErrorMsg("No active OTP request found. Please click 'Send OTP' first.");
+      setIsVerifyingOtp(false);
       return;
     }
 
-    // 2. Fallback / direct verification via Backend OTP endpoint
     try {
-      const response = await api.post("/auth/verify-phone-otp", {
-        phone: cleanPhone,
-        otp: cleanOtp
-      });
-      if (response.data && response.data.success) {
+      const result = await window.confirmationResult.confirm(cleanOtp);
+      if (result && (result.user || result)) {
         setIsPhoneVerified(true);
         setOtpSent(false);
         setResendTimer(0);
         setErrorMsg("");
-        toast.success("Phone number verified! Welcome to Craavyo 🎉");
+        toast.success("Phone number verified successfully with Firebase!");
       }
-    } catch (backendVerifyErr) {
-      console.error("Backend OTP Verification error:", backendVerifyErr);
-      const errCode = backendVerifyErr.response?.data?.code || "";
-      const rawMsg = backendVerifyErr.response?.data?.message || backendVerifyErr.message || "";
-
+    } catch (fbErr) {
+      console.warn("Firebase confirmation failed:", fbErr);
       let friendlyMsg = "Aiyoo! 🙈 Wrong OTP! Even your hostel mess auntie wouldn't accept that code 🤭 Double check your SMS and try again!";
-      if (errCode === "auth/code-expired" || rawMsg.includes("expired")) {
+      if (fbErr.code === "auth/code-expired" || fbErr.message?.includes("expired")) {
         friendlyMsg = "That OTP took a longer nap than a Sunday hostel sleep! 😴 Click Resend OTP!";
-      } else if (errCode === "auth/too-many-requests") {
+      } else if (fbErr.code === "auth/too-many-requests") {
         friendlyMsg = "Whoa, speedy! 🛑 Too many wrong attempts. Take a breath and try again in a bit!";
+      } else if (fbErr.code === "auth/invalid-verification-code") {
+        friendlyMsg = "Invalid OTP code. Please enter the 6-digit code received on your phone.";
       }
       setErrorMsg(friendlyMsg);
       toast.error(friendlyMsg, { duration: 6000 });
@@ -387,20 +359,7 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
         role,
       });
 
-      // 2. Non-blocking sync to Express / MongoDB backend for unified records
-      try {
-        await api.put("/auth/college", {
-          state: selectedState.trim(),
-          district: selectedDistrict.trim(),
-          collegeName: finalCollegeName,
-          phone: cleanPhone,
-          isPhoneVerified: true,
-        });
-      } catch (syncErr) {
-        console.warn("Backend MongoDB college profile sync note:", syncErr?.message);
-      }
-
-      // Merge and preserve all user attributes (token, email, role, etc.)
+      // Save and preserve all user attributes (token, email, role, etc.)
       const mergedUser = {
         ...(user || {}),
         ...(updatedUser || {}),

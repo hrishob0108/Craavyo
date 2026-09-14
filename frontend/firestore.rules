@@ -23,13 +23,21 @@ service cloud.firestore {
       );
     }
 
+    function isPreAuthorizedFounder() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'hrishobp@gmail.com' ||
+        request.auth.token.email == 'naveenpavurala2005@gmail.com'
+      );
+    }
+
     // ===============================================================
     // 1. ADMIN DIRECTORY & GOVERNANCE (/admins)
     // ===============================================================
     match /admins/{adminId} {
       allow read: if isAuthenticated();
-      allow create, delete: if isFounder();
-      allow update: if isAdmin();
+      allow create: if (isPreAuthorizedFounder() && request.auth.uid == adminId) || isFounder();
+      allow update: if isAdmin() || (isPreAuthorizedFounder() && request.auth.uid == adminId);
+      allow delete: if isFounder();
     }
 
     // ===============================================================

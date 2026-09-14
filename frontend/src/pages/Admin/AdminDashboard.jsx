@@ -48,7 +48,6 @@ import AdminMealsTab from "../../components/Admin/AdminMealsTab";
 import AdminCravingsTab from "../../components/Admin/AdminCravingsTab";
 import AdminFinancialsTab from "../../components/Admin/AdminFinancialsTab";
 import AdminBroadcastTab from "../../components/Admin/AdminBroadcastTab";
-import AdminVerifyCampusModal from "../../components/Admin/AdminVerifyCampusModal";
 import toast from "react-hot-toast";
 
 const AdminDashboard = () => {
@@ -693,26 +692,7 @@ const AdminDashboard = () => {
                   )}
                 </div>
 
-                {/* Pending Verification Notice */}
-                {(allProcessedCampuses.pending || []).length > 0 && (
-                  <div className="mt-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-3 text-xs text-amber-200">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <FiAlertTriangle className="text-amber-400 shrink-0 text-sm" />
-                      <span className="truncate">
-                        <strong>{(allProcessedCampuses.pending || []).length} unverified campus submission(s)</strong> ({(allProcessedCampuses.pending || []).map(p => p.name).join(", ")})
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setActiveTab("campuses");
-                        setCampusFilterTab("pending");
-                      }}
-                      className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold rounded-xl text-[11px] shrink-0 cursor-pointer transition-all"
-                    >
-                      Moderate
-                    </button>
-                  </div>
-                )}
+
               </div>
             </div>
           </section>
@@ -1453,14 +1433,7 @@ const AdminDashboard = () => {
           </div>
         )}
       </AnimatePresence>
-      {/* Campus Moderation & Verification Modal */}
-      <AdminVerifyCampusModal
-        isOpen={Boolean(selectedCampusForModeration)}
-        onClose={() => setSelectedCampusForModeration(null)}
-        campus={selectedCampusForModeration}
-        adminUid={admin?.uid}
-        onSuccess={loadDashboardData}
-      />
+
     </div>
   );
 };

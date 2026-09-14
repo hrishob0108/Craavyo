@@ -211,7 +211,7 @@ const AdminStudentsTab = ({ students = [], currentAdmin, onStudentUpdated }) => 
                     {/* College */}
                     <td className="py-4 px-4">
                       <p className="font-semibold text-white/90 truncate max-w-[200px]">
-                        {student.collegeName || "Campus Not Set"}
+                        {student.collegeName && student.collegeName !== "College Not Selected" && student.isPhoneVerified ? student.collegeName : "College Not Selected"}
                       </p>
                       <p className="text-[10px] text-white/40 flex items-center gap-1 mt-0.5">
                         <FiMapPin className="text-[#E8AE68]/70" />
@@ -363,7 +363,7 @@ const AdminStudentsTab = ({ students = [], currentAdmin, onStudentUpdated }) => 
                     College Campus
                   </p>
                   <p className="font-semibold text-white truncate">
-                    {selectedStudent.collegeName || "Not assigned"}
+                    {selectedStudent.collegeName && selectedStudent.collegeName !== "College Not Selected" && selectedStudent.isPhoneVerified ? selectedStudent.collegeName : "College Not Selected"}
                   </p>
                 </div>
 

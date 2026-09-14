@@ -6,6 +6,7 @@ import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../firebase";
 import toast from "react-hot-toast";
 import { saveCollegeOnboarding } from "../services/firestoreService";
+import { isCollegeVerified } from "../utils/collegeVerification";
 import collegesHierarchy from "../data/collegesHierarchy.json";
 
 const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {

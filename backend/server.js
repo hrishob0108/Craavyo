@@ -23,7 +23,21 @@ const PORT = process.env.PORT || 5001; // Match frontend default port
 // Initialize Socket.io
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "*", // Allow all in dev, restrict in prod
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (
+        origin === process.env.FRONTEND_URL ||
+        origin.startsWith('http://localhost') ||
+        origin.endsWith('.vercel.app') ||
+        origin.endsWith('.web.app') ||
+        origin.endsWith('.firebaseapp.com') ||
+        origin.endsWith('craavyo.com')
+      ) {
+        return callback(null, true);
+      } else {
+        return callback(new Error('CORS policy violation'));
+      }
+    },
     methods: ["GET", "POST"]
   }
 });
@@ -36,7 +50,24 @@ app.use((req, res, next) => {
 connectDB();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "*",
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like curl requests or mobile apps)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost, main domain, and any Firebase/Vercel preview link
+    if (
+      origin === process.env.FRONTEND_URL ||
+      origin.startsWith('http://localhost') ||
+      origin.endsWith('.vercel.app') ||
+      origin.endsWith('.web.app') ||
+      origin.endsWith('.firebaseapp.com') ||
+      origin.endsWith('craavyo.com')
+    ) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('CORS policy violation'));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   credentials: true
 }));

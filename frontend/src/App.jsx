@@ -10,9 +10,14 @@ import DayscholarDashboard from './pages/Dashboard/DayscholarDashboard';
 import HostelerDashboard from './pages/Dashboard/HostelerDashboard';
 import AllMeals from './pages/AllMeals';
 import AllRequests from './pages/AllRequests';
+import PostDish from './pages/PostDish';
+import RequestCraving from './pages/RequestCraving';
 import SelectRole from './pages/SelectRole';
 import TrackOrders from './pages/TrackOrders';
+import Profile from './pages/Profile';
 import CollegeOnboardingModal from './components/CollegeOnboardingModal';
+import AdminLogin from './pages/Admin/AdminLogin';
+import AdminDashboard from './pages/Admin/AdminDashboard';
 import { Toaster } from 'react-hot-toast';
 
 const App = () => {
@@ -40,16 +45,31 @@ const App = () => {
     setCurrentUser(updatedUser);
   };
 
-  // Determine if onboarding modal should be shown
-  const isAuthPage = ['/home', '/login', '/register', '/forgot-password', '/reset-password', '/'].includes(location.pathname);
-  const needsCollegeOnboarding = currentUser && (!currentUser.collegeName || !currentUser.collegeName.trim() || !currentUser.isPhoneVerified) && !isAuthPage;
+  // Determine if onboarding modal should be shown (strictly for student accounts)
+  const isAuthPage = ['/home', '/login', '/register', '/forgot-password', '/reset-password', '/admin/login', '/admin', '/'].includes(location.pathname);
+  const isStudent = currentUser && ['hosteler', 'dayscholar'].includes(currentUser.role);
+  const needsCollegeOnboarding = isStudent && (!currentUser.collegeName || !currentUser.collegeName.trim() || !currentUser.isPhoneVerified) && !isAuthPage;
 
   return (
     <>
       <Toaster 
         position="top-center" 
+        containerStyle={{
+          zIndex: 99999999,
+          top: 24,
+        }}
         toastOptions={{ 
-          style: { background: '#111827', color: '#fff', borderRadius: '1rem', fontWeight: 'bold' },
+          style: { 
+            background: '#1E1113', 
+            color: '#fff', 
+            borderRadius: '1rem', 
+            fontWeight: 'bold',
+            border: '1px solid rgba(232, 174, 104, 0.4)',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6)',
+            padding: '12px 20px',
+            fontSize: '14px',
+            zIndex: 99999999,
+          },
           success: { iconTheme: { primary: '#10B981', secondary: '#fff' } },
           error: { iconTheme: { primary: '#EF4444', secondary: '#fff' } }
         }} 
@@ -77,6 +97,8 @@ const App = () => {
       <Route path="/hosteler-dashboard" element={<HostelerDashboard />} />
       <Route path="/all-meals" element={<AllMeals />} />
       <Route path="/all-requests" element={<AllRequests />} />
+      <Route path="/post-dish" element={<PostDish />} />
+      <Route path="/request-craving" element={<RequestCraving />} />
       <Route path="/track-orders" element={<TrackOrders />} />
 
       {/* Optional backward redirects (if you ever used camelCase before) */}
@@ -84,6 +106,12 @@ const App = () => {
       <Route path="/hostelerDashboard" element={<Navigate to="/hosteler-dashboard" />} />
 
       <Route path="/select-role" element={<SelectRole />} />
+      <Route path="/profile" element={<Profile />} />
+
+      {/* 👑 Executive Multi-Tier Admin Portal */}
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/admin" element={<AdminDashboard />} />
+      <Route path="/admin/dashboard" element={<Navigate to="/admin" />} />
     </Routes>
     </>
   );

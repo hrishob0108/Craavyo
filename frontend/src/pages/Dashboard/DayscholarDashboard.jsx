@@ -2,13 +2,25 @@ import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiBell, FiCheckCircle, FiStar, FiMapPin, FiClock, FiTruck, FiZap, FiMenu, FiSmile, FiLogOut, FiEdit2, FiTrash2, FiX, FiImage, FiLink, FiUpload, FiArrowRight, FiLoader, FiHome, FiSearch, FiChevronRight, FiAward,
-  FiChevronDown, FiTrendingUp, FiArrowUpRight, FiBarChart2, FiBox, FiHeart, FiCheckSquare, FiClipboard
+  FiChevronDown, FiTrendingUp, FiArrowUpRight, FiBarChart2, FiBox, FiHeart, FiCheckSquare, FiClipboard, FiUser, FiRadio, FiAlertTriangle
 } from 'react-icons/fi';
 import { FaRupeeSign, FaFire } from 'react-icons/fa';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import api from '../../services/api';
-import { useSocket } from '../../context/SocketContext';
+import { 
+  listenDayscholarOrders, 
+  listenCollegeFoodRequests, 
+  getMealsByCollege, 
+  createMeal, 
+  deleteMeal, 
+  updateOrderStatus, 
+  acceptFoodRequest, 
+  getSellerStats, 
+  getSellerReviews,
+  listenActiveBroadcastsForUser 
+} from '../../services/firestoreService';
+import CameraUploadModal from '../../components/CameraUploadModal';
+import CampusBroadcastBanner from '../../components/CampusBroadcastBanner';
 
 // Animation configs
 const containerVariants = {
@@ -23,22 +35,30 @@ const itemVariants = {
 
 const DayscholarDashboard = () => {
   const navigate = useNavigate();
-  const socket = useSocket();
   const wid = useRef();
   const [localUploads, setLocalUploads] = useState({});
   const [otpInputs, setOtpInputs] = useState({});
   const activeOrderIdRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTag, setSelectedTag] = useState("All");
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [requests, setRequests] = useState([]);
   const [myMenu, setMyMenu] = useState([]);
   const [customRequests, setCustomRequests] = useState([]);
   const [ratingStats, setRatingStats] = useState({ averageRating: 0, totalReviews: 0 });
   const [reviews, setReviews] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [broadcasts, setBroadcasts] = useState([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [isPostDishModalOpen, setIsPostDishModalOpen] = useState(false);
   const [postDishForm, setPostDishForm] = useState({ title: '', price: '', image: '', tag: 'New', isVeg: true });
+  const [postDishErrors, setPostDishErrors] = useState({});
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  
+  const prevOrdersSetRef = useRef(null);
+  const prevFoodReqsSetRef = useRef(null);
   
   const user = JSON.parse(sessionStorage.getItem('currentUser'));
 
@@ -50,138 +70,94 @@ const DayscholarDashboard = () => {
     if (user.role !== 'dayscholar') {
       if (user.role === 'hosteler') {
         navigate('/hosteler-dashboard');
+      } else if (['founder', 'national_head', 'state_head'].includes(user.role)) {
+        navigate('/admin');
       } else {
         navigate('/login');
       }
       return;
     }
+    const userCollege = (user?.collegeName || "").trim();
+    const userId = user._id || user.uid;
+
+    // 1. Real-time incoming Orders listener
+    const unsubscribeOrders = listenDayscholarOrders(userId, (liveOrders) => {
+      if (prevOrdersSetRef.current) {
+        liveOrders.forEach(o => {
+          if (!prevOrdersSetRef.current.has(o._id)) {
+            toast.success(`🔔 New Order! "${o.dishName}" from ${o.buyerName || 'Hosteler'}!`, { duration: 8000 });
+            setNotifications(prev => [
+              { id: `${o._id}_${Date.now()}`, text: `New order received: "${o.dishName}" from ${o.buyerName || 'Hosteler'}` },
+              ...prev
+            ]);
+          }
+        });
+      }
+      prevOrdersSetRef.current = new Set(liveOrders.map(o => o._id));
+      setRequests(liveOrders);
+    });
+
+    // 2. Real-time campus Food Requests listener
+    const unsubscribeFoodRequests = listenCollegeFoodRequests(userCollege, (liveReqs) => {
+      if (prevFoodReqsSetRef.current) {
+        liveReqs.forEach(r => {
+          if (!prevFoodReqsSetRef.current.has(r._id)) {
+            toast(`🍲 New Campus Craving: "${r.dishName}"!`, { duration: 6000, icon: '🎓' });
+            setNotifications(prev => [
+              { id: `${r._id}_${Date.now()}`, text: `Campus craving posted: "${r.dishName}"` },
+              ...prev
+            ]);
+          }
+        });
+      }
+      prevFoodReqsSetRef.current = new Set(liveReqs.map(r => r._id));
+      setCustomRequests(liveReqs);
+    });
+
+    // 3. Setup real-time listener for Campus Broadcasts
+    const unsubscribeBroadcasts = listenActiveBroadcastsForUser(user, (liveBroadcasts) => {
+      setBroadcasts(liveBroadcasts);
+    });
+
+    // 4. Initial fetch for menu and reviews
     fetchDashboardData();
 
-    // Cloudinary setup
-    let myWidget = window.cloudinary?.createUploadWidget(
-      { cloudName: "dfseckyjx", uploadPreset: "qbvu3y5j", sources: ['camera'] },
-      (error, result) => {
-        if (!error && result && result.event === "success") {
-          const target = activeOrderIdRef.current;
-          if (target && target.id) {
-            setLocalUploads(prev => ({
-              ...prev,
-              [`${target.id}_${target.type}`]: result.info.secure_url
-            }));
-            toast.success(target.type === 'cooking' ? "Cooking Proof Uploaded!" : "Handover Proof Uploaded!");
-          }
-        }
-      }
-    );
-    wid.current = myWidget;
-  }, []);
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleNewOrderRequest = (newOrder) => {
-      console.log("[DayscholarDashboard] Received new_order_request via socket:", newOrder);
-      toast.success(`🎉 New order received: ${newOrder.dishName}!`);
-      setNotifications(prev => [
-        { id: Date.now(), text: `New order request for "${newOrder.dishName}" from ${newOrder.buyerName}!` },
-        ...prev
-      ]);
-      // Update state immediately so UI updates in real-time without delay
-      setRequests(prev => {
-        if (prev.some(o => o._id === newOrder._id)) {
-          return prev.map(o => o._id === newOrder._id ? newOrder : o);
-        }
-        return [newOrder, ...prev];
-      });
-      fetchDashboardData();
-    };
-
-    const handleOrderStatusUpdated = (updatedOrder) => {
-      console.log("[DayscholarDashboard] Received order_status_updated via socket:", updatedOrder);
-      setRequests(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
-      fetchDashboardData();
-    };
-
-    const handleNewFoodRequest = (newRequest) => {
-      console.log("[DayscholarDashboard] Received new_food_request via socket:", newRequest);
-      toast.success(`New custom food request: ${newRequest.dishName}! 📣`);
-      setCustomRequests(prev => {
-        if (prev.some(r => r._id === newRequest._id)) return prev;
-        return [newRequest, ...prev];
-      });
-      fetchDashboardData();
-    };
-
-    const handleFoodRequestCancelled = ({ id }) => {
-      setCustomRequests(prev => prev.filter(r => r._id !== id));
-      fetchDashboardData();
-    };
-
-    const handleFoodRequestAccepted = ({ id }) => {
-      setCustomRequests(prev => prev.filter(r => r._id !== id));
-      fetchDashboardData();
-    };
-
-    const handleNewReviewReceived = (newReview) => {
-      toast.success("You received a new review! ⭐");
-      setNotifications(prev => [
-        { id: Date.now(), text: `New ${newReview.rating}★ review received from ${newReview.buyerName || 'a Hosteler'}!` },
-        ...prev
-      ]);
-      fetchDashboardData();
-    };
-
-    socket.on('new_order_request', handleNewOrderRequest);
-    socket.on('order_status_updated', handleOrderStatusUpdated);
-    socket.on('new_food_request', handleNewFoodRequest);
-    socket.on('food_request_cancelled', handleFoodRequestCancelled);
-    socket.on('food_request_accepted', handleFoodRequestAccepted);
-    socket.on('new_review_received', handleNewReviewReceived);
-
     return () => {
-      socket.off('new_order_request', handleNewOrderRequest);
-      socket.off('order_status_updated', handleOrderStatusUpdated);
-      socket.off('new_food_request', handleNewFoodRequest);
-      socket.off('food_request_cancelled', handleFoodRequestCancelled);
-      socket.off('food_request_accepted', handleFoodRequestAccepted);
-      socket.off('new_review_received', handleNewReviewReceived);
+      unsubscribeOrders();
+      unsubscribeFoodRequests();
+      unsubscribeBroadcasts();
     };
-  }, [socket]);
+  }, []);
 
   const fetchDashboardData = async () => {
     try {
       const userCollege = (user?.collegeName || "").trim();
-      const resOrders = await api.get('/orders/requests');
-      setRequests(resOrders.data);
-      const resMeals = await api.get('/meals', {
-        params: userCollege ? { collegeName: userCollege } : {}
-      });
-      setMyMenu(resMeals.data.filter(m => (typeof m.createdBy === 'object' ? (m.createdBy._id || m.createdBy.id) : m.createdBy) === user._id));
-      const resPendingRequests = await api.get('/food-requests/pending', {
-        params: userCollege ? { collegeName: userCollege } : {}
-      });
-      setCustomRequests(resPendingRequests.data);
-      const statsRes = await api.get(`/reviews/seller/${user._id}/stats`);
-      setRatingStats(statsRes.data);
-      const reviewsRes = await api.get(`/reviews/user/${user._id}`);
-      setReviews(reviewsRes.data);
+      const userId = user?._id || user?.uid;
+      if (!userId) return;
+
+      const [allMeals, stats, sellerReviews] = await Promise.all([
+        getMealsByCollege(userCollege),
+        getSellerStats(userId),
+        getSellerReviews(userId)
+      ]);
+
+      setMyMenu(allMeals.filter(m => (typeof m.createdBy === 'object' ? (m.createdBy._id || m.createdBy.id) : m.createdBy) === userId));
+      setRatingStats(stats);
+      setReviews(sellerReviews);
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to load dashboard data");
+      console.error("Dashboard data load error:", err);
     }
   };
 
   const handleAcceptRequest = async (requestId) => {
     setActionLoadingId(`accept_${requestId}`);
     try {
-      const res = await api.put(`/food-requests/${requestId}/accept`);
-      if (res.status === 200) {
-        toast.success("Request accepted! Start cooking.");
-        fetchDashboardData();
-      }
+      await acceptFoodRequest(requestId, user);
+      toast.success("Request accepted! Active order created.");
+      fetchDashboardData();
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || "Failed to accept request.");
+      toast.error(err.message || "Failed to accept request.");
     } finally {
       setActionLoadingId(null);
     }
@@ -190,16 +166,10 @@ const DayscholarDashboard = () => {
   const handleUpdateStatus = async (orderId, newStatus) => {
     setActionLoadingId(`status_${orderId}_${newStatus}`);
     try {
-      const payload = { status: newStatus };
-      const res = await api.put(`/orders/${orderId}/status`, payload);
-      if (res.status === 200) {
-        toast.success(`Order marked as ${newStatus}`);
-        fetchDashboardData();
-      } else {
-        toast.error("Failed to update order");
-      }
+      await updateOrderStatus(orderId, { status: newStatus });
+      toast.success(`Order marked as ${newStatus}`);
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err.message || "Failed to update order");
     } finally {
       setActionLoadingId(null);
     }
@@ -207,21 +177,48 @@ const DayscholarDashboard = () => {
 
   const handlePublish = async (e) => {
      e.preventDefault();
-     if(!postDishForm.title || !postDishForm.price) return toast.error("Title and Price are required.");
-     
+     const errs = {};
+     if (!postDishForm.title?.trim()) {
+       errs.title = "Dish name is required.";
+     } else if (postDishForm.title.trim().length < 3) {
+       errs.title = "Dish name must be at least 3 characters.";
+     }
+
+     if (postDishForm.price === "" || postDishForm.price === undefined || postDishForm.price === null) {
+       errs.price = "Price is required (min ₹20).";
+     } else if (isNaN(postDishForm.price)) {
+       errs.price = "Please enter a valid price.";
+     } else if (Number(postDishForm.price) < 0) {
+       errs.price = "Price cannot be negative.";
+     } else if (Number(postDishForm.price) < 20) {
+       errs.price = "Minimum price must be at least ₹20.";
+     }
+
+     if (Object.keys(errs).length > 0) {
+       setPostDishErrors(errs);
+       toast.error(Object.values(errs)[0]);
+       return;
+     }
+
+     setPostDishErrors({});
      setIsPublishing(true);
      try {
-       const res = await api.post('/meals', postDishForm);
-       if(res.status === 200 || res.status === 201) {
-          toast.success("Dish Published seamlessly!");
-          setIsPostDishModalOpen(false);
-          setPostDishForm({ title: '', price: '', image: '', tag: 'New', isVeg: true });
-          fetchDashboardData();
-       } else {
-          toast.error("Failed to post dish.");
-       }
+       const userCollege = (user?.collegeName || "").trim();
+       const userId = user._id || user.uid;
+       await createMeal({
+         ...postDishForm,
+         price: Number(postDishForm.price),
+         collegeName: userCollege,
+         cookName: user.name,
+         createdBy: userId
+       });
+       toast.success("Dish Published seamlessly!");
+       setIsPostDishModalOpen(false);
+       setPostDishForm({ title: '', price: '', image: '', tag: 'New', isVeg: true });
+       fetchDashboardData();
      } catch (err) {
-        toast.error("Network error. Is the server running?");
+        console.error(err);
+        toast.error("Failed to post dish.");
      } finally {
         setIsPublishing(false);
      }
@@ -247,21 +244,15 @@ const DayscholarDashboard = () => {
         payload = { status: 'Delivered', handoverProofImageUrl: localUrl, otp: otp };
       }
 
-      const res = await api.put(`/orders/${orderId}/status`, payload);
-
-      if (res.status === 200) {
-        toast.success(type === 'cooking' ? "Cooking Proof uploaded!" : "Delivery complete!");
-        setLocalUploads(prev => {
-          const copy = { ...prev };
-          delete copy[`${orderId}_${type}`];
-          return copy;
-        });
-        fetchDashboardData();
-      } else {
-        toast.error("Failed to submit proof");
-      }
+      await updateOrderStatus(orderId, payload);
+      toast.success(type === 'cooking' ? "Cooking Proof uploaded!" : "Delivery complete!");
+      setLocalUploads(prev => {
+        const copy = { ...prev };
+        delete copy[`${orderId}_${type}`];
+        return copy;
+      });
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message);
+      toast.error(err.message || "Failed to submit proof");
     } finally {
       setActionLoadingId(null);
     }
@@ -309,10 +300,13 @@ const DayscholarDashboard = () => {
   return (
     <div className="bg-[#FFF0DD] min-h-screen font-sans relative overflow-x-hidden text-[#431619] pb-12">
 
-      <Header user={user} navigate={navigate} notifications={notifications} setNotifications={setNotifications} isNotifOpen={isNotifOpen} setIsNotifOpen={setIsNotifOpen} />
+      <Header user={user} navigate={navigate} notifications={notifications} setNotifications={setNotifications} broadcasts={broadcasts} isNotifOpen={isNotifOpen} setIsNotifOpen={setIsNotifOpen} isProfileMenuOpen={isProfileMenuOpen} setIsProfileMenuOpen={setIsProfileMenuOpen} />
 
       <main className="relative z-10 pt-[140px] px-4 sm:px-6 lg:px-12 max-w-[1440px] mx-auto">
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
+          {/* Non-intrusive Emergency Alert Banner (Only appears if urgent broadcast is active) */}
+          <CampusBroadcastBanner broadcasts={broadcasts} />
+
           <WelcomeBanner user={user} onOpenPostDish={() => setIsPostDishModalOpen(true)} />
 
           <div className="mt-[80px]">
@@ -341,7 +335,6 @@ const DayscholarDashboard = () => {
               
               <ActiveDeliveries
                 deliveries={activeDeliveries}
-                wid={wid}
                 localUploads={localUploads}
                 onUpdateStatus={handleUpdateStatus}
                 onUploadProof={handleUploadProof}
@@ -349,6 +342,7 @@ const DayscholarDashboard = () => {
                 otpInputs={otpInputs}
                 setOtpInputs={setOtpInputs}
                 actionLoadingId={actionLoadingId}
+                setIsCameraModalOpen={setIsCameraModalOpen}
               />
             </div>
             
@@ -365,17 +359,35 @@ const DayscholarDashboard = () => {
 
       <PostDishModal 
         isOpen={isPostDishModalOpen} 
-        onClose={() => setIsPostDishModalOpen(false)} 
+        onClose={() => {
+          setIsPostDishModalOpen(false);
+          setPostDishErrors({});
+        }} 
         form={postDishForm} 
         setForm={setPostDishForm} 
+        errors={postDishErrors}
+        setErrors={setPostDishErrors}
         onSubmit={handlePublish} 
         isPublishing={isPublishing} 
+      />
+
+      <CameraUploadModal
+        isOpen={isCameraModalOpen}
+        onClose={() => setIsCameraModalOpen(false)}
+        onUploadComplete={(url) => {
+          const target = activeOrderIdRef.current;
+          if (target && target.id) {
+            setLocalUploads(prev => ({ ...prev, [`${target.id}_${target.type}`]: url }));
+            toast.success(target.type === 'cooking' ? "Cooking Proof Uploaded!" : "Handover Proof Uploaded!");
+          }
+          setIsCameraModalOpen(false);
+        }}
       />
     </div>
   );
 };
 
-const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, setIsNotifOpen, searchQuery, setSearchQuery }) => {
+const Header = ({ user, navigate, notifications, setNotifications, broadcasts = [], isNotifOpen, setIsNotifOpen, isProfileMenuOpen, setIsProfileMenuOpen, searchQuery, setSearchQuery }) => {
   const handleLogout = () => {
     sessionStorage.removeItem('currentUser');
     sessionStorage.removeItem('user');
@@ -383,6 +395,8 @@ const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, 
     toast.success("Successfully logged out");
     navigate('/login');
   };
+
+  const totalNotifCount = (notifications?.length || 0) + (broadcasts?.length || 0);
 
   return (
     <div className="fixed top-6 left-0 right-0 z-50 flex justify-center w-full px-6 md:px-12 pointer-events-none">
@@ -395,8 +409,8 @@ const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, 
         <div className="flex w-full justify-between items-center h-full relative">
 
           {/* Left: Logo */}
-          <Link to="/" className="text-[32px] font-serif font-bold text-[#8C3F3F] tracking-tight shrink-0">
-            Craavyo
+          <Link to="/" className="shrink-0 flex items-center">
+            <img src="/logo.png" alt="Craavyo Logo" className="h-12 md:h-16 w-auto" />
           </Link>
 
           {/* Middle: Search Bar (Exactly Centered) */}
@@ -435,7 +449,7 @@ const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, 
                 className="text-[#4D2B2B]/70 hover:text-[#8C3F3F] relative flex items-center justify-center cursor-pointer transition-colors p-2"
               >
                 <FiBell className="w-6 h-6 stroke-[1.5]" />
-                {notifications && notifications.length > 0 && (
+                {totalNotifCount > 0 && (
                   <span className="absolute top-1.5 right-2 w-2.5 h-2.5 bg-[#8C3F3F] rounded-full border-[2px] border-white animate-pulse"></span>
                 )}
               </motion.button>
@@ -446,45 +460,122 @@ const Header = ({ user, navigate, notifications, setNotifications, isNotifOpen, 
                     initial={{ opacity: 0, y: 15, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                    className="absolute right-0 mt-4 w-80 bg-white/95 backdrop-blur-xl border border-primary/10 shadow-2xl rounded-2xl p-4 z-50 overflow-hidden"
+                    className="absolute right-0 mt-4 w-80 md:w-96 bg-white/95 backdrop-blur-xl border border-[#8C3F3F]/15 shadow-2xl rounded-2xl p-4 z-50 overflow-hidden"
                   >
-                    <div className="flex justify-between items-center pb-2 border-b border-primary/10 mb-2">
-                      <span className="font-black text-sm text-espresso">Notifications</span>
+                    <div className="flex justify-between items-center pb-2 border-b border-[#8C3F3F]/10 mb-3">
+                      <span className="font-black text-sm text-[#4D2B2B]">Notifications</span>
                       {notifications && notifications.length > 0 && (
-                        <button onClick={() => setNotifications([])} className="text-[10px] font-black text-primary hover:text-primary-hover bg-primary/10 px-2 py-1 rounded cursor-pointer">Clear All</button>
+                        <button onClick={() => setNotifications([])} className="text-[10px] font-black text-[#8C3F3F] hover:text-[#732A2A] bg-[#8C3F3F]/10 px-2 py-1 rounded cursor-pointer">Clear Activity</button>
                       )}
                     </div>
-                    <ul className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
-                      {!notifications || notifications.length === 0 ? (
-                        <li className="text-center py-6 text-xs text-espresso-light/60 font-semibold">No new notifications.</li>
-                      ) : (
-                        notifications.map(n => (
-                          <li key={n.id} className="text-xs font-semibold text-espresso-light p-2.5 bg-cream/40 border border-primary/5 rounded-lg text-left leading-relaxed">
-                            {n.text}
-                          </li>
-                        ))
-                      )}
-                    </ul>
+
+                    {/* Campus Broadcasts Section (If Any) */}
+                    {broadcasts && broadcasts.length > 0 && (
+                      <div className="mb-3 pb-3 border-b border-[#8C3F3F]/10">
+                        <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-[#8C3F3F] mb-2">
+                          <FiRadio className="w-3.5 h-3.5" />
+                          Campus Announcements ({broadcasts.length})
+                        </div>
+                        <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
+                          {broadcasts.map(b => {
+                            const isUrgent = b.priority === "urgent";
+                            const isCelebration = b.priority === "celebration";
+                            return (
+                              <div 
+                                key={b._id || b.id} 
+                                className={`p-2.5 rounded-xl border text-left leading-relaxed ${
+                                  isUrgent 
+                                    ? "bg-[#8C3F3F]/10 border-[#8C3F3F]/30" 
+                                    : isCelebration
+                                    ? "bg-amber-500/10 border-amber-500/30"
+                                    : "bg-[#FFF8F2] border-[#E8D9CF]"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-1 mb-1">
+                                  <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
+                                    isUrgent 
+                                      ? "bg-[#8C3F3F] text-white" 
+                                      : isCelebration
+                                      ? "bg-amber-500 text-white"
+                                      : "bg-[#4D2B2B]/10 text-[#4D2B2B]"
+                                  }`}>
+                                    {isUrgent ? "🚨 Urgent" : isCelebration ? "🎉 Celebration" : "📢 Notice"}
+                                  </span>
+                                  <span className="text-[10px] text-[#4D2B2B]/60 font-semibold truncate max-w-[140px]">
+                                    {b.targetCollege !== "ALL" ? b.targetCollege : "Campus-wide"}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-bold text-[#4D2B2B]">{b.title}</p>
+                                <p className="text-[11px] text-[#4D2B2B]/80 mt-0.5">{b.message}</p>
+                                <p className="text-[9px] text-[#4D2B2B]/50 font-medium mt-1">
+                                  By {b.createdByName || "Campus Leadership"}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Regular Order & Activity Notifications */}
+                    <div>
+                      <div className="text-[11px] font-bold text-[#4D2B2B]/60 uppercase tracking-wider mb-2">
+                        Recent Activity
+                      </div>
+                      <ul className="space-y-2 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
+                        {!notifications || notifications.length === 0 ? (
+                          <li className="text-center py-4 text-xs text-[#4D2B2B]/50 font-medium">No recent activity.</li>
+                        ) : (
+                          notifications.map(n => (
+                            <li key={n.id} className="text-xs font-semibold text-[#4D2B2B]/80 p-2.5 bg-[#FFF8F2] border border-[#E8D9CF] rounded-xl text-left leading-relaxed">
+                              {n.text}
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
-            {/* User Avatar */}
-            <div className="relative group cursor-pointer" onClick={handleLogout} title="Click to Logout">
-              {user?.profilePicture ? (
-                <img src={user.profilePicture} alt="User" className="w-[44px] h-[44px] rounded-full object-cover border border-[#E8D9CF] shadow-sm hover:scale-105 transition-transform duration-300" />
-              ) : (
-                <div className="w-[44px] h-[44px] rounded-full bg-[#FFF5EF] flex items-center justify-center text-[#8C3F3F] font-bold text-lg shadow-sm border border-[#E8D9CF] uppercase overflow-hidden hover:scale-105 transition-transform duration-300">
-                  {user?.name?.[0] || 'D'}
-                </div>
-              )}
-              {/* Tooltip for logout */}
-              <div className="absolute top-14 right-0 bg-white shadow-lg rounded-xl px-4 py-2 text-[13px] font-semibold text-[#8C3F3F] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-[#E8D9CF]">
-                Logout
+            {/* User Avatar & Dropdown */}
+            <div className="relative z-50">
+              <div 
+                className="w-[44px] h-[44px] rounded-full bg-[#FFF5EF] flex items-center justify-center text-[#8C3F3F] font-bold text-lg shadow-sm border border-[#E8D9CF] uppercase overflow-hidden hover:scale-105 transition-transform duration-300 cursor-pointer"
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              >
+                {user?.name?.[0] || 'D'}
               </div>
-            </div>
 
+              <AnimatePresence>
+                {isProfileMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                    className="absolute right-0 mt-3 w-48 bg-white/95 backdrop-blur-xl border border-[#E8D9CF] shadow-2xl rounded-2xl py-2 z-50 overflow-hidden"
+                  >
+                    <Link 
+                      to="/profile" 
+                      className="flex items-center px-4 py-3 text-sm font-semibold text-[#4D2B2B] hover:bg-[#FFF5EF] transition-colors"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                    >
+                      <FiUser className="mr-3 w-4 h-4" />
+                      My Profile
+                    </Link>
+                    <div className="border-t border-[#E8D9CF]/50 my-1"></div>
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full flex items-center px-4 py-3 text-sm font-semibold text-[#8C3F3F] hover:bg-[#FFF5EF] transition-colors"
+                    >
+                      <FiLogOut className="mr-3 w-4 h-4" />
+                      Logout
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </motion.header>
@@ -519,15 +610,15 @@ const WelcomeBanner = ({ user, onOpenPostDish }) => {
           Fresh meal requests are waiting nearby. Cook with love and start earning today.
         </p>
         <div className="flex items-center gap-4">
-          <button
-            onClick={onOpenPostDish}
+          <Link
+            to="/post-dish"
             className="bg-white text-[#222] font-semibold px-6 py-2.5 rounded-full text-[15px] flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm cursor-pointer"
           >
             <svg width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
             Post a Dish
-          </button>
+          </Link>
           <Link
             to="/all-requests"
             className="bg-transparent border border-white/90 text-white font-medium px-6 py-2.5 rounded-full text-[15px] flex items-center gap-2 hover:bg-white/10 transition-colors"
@@ -590,7 +681,7 @@ const StatsGrid = ({ stats }) => (
   </motion.section>
 );
 
-const ActiveDeliveries = ({ deliveries, wid, localUploads, onUpdateStatus, onUploadProof, activeOrderIdRef, otpInputs, setOtpInputs, actionLoadingId }) => {
+const ActiveDeliveries = ({ deliveries, localUploads, onUpdateStatus, onUploadProof, activeOrderIdRef, otpInputs, setOtpInputs, actionLoadingId, setIsCameraModalOpen }) => {
   const [selectedImage, setSelectedImage] = useState(null);
 
   return (
@@ -643,7 +734,7 @@ const ActiveDeliveries = ({ deliveries, wid, localUploads, onUpdateStatus, onUpl
                       <button
                         onClick={() => {
                           activeOrderIdRef.current = { id: delivery._id, type: 'cooking' };
-                          wid.current?.open();
+                          setIsCameraModalOpen(true);
                         }}
                         className="bg-[#FFFAEF] border border-[#BA7650] text-[#BA7650] font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-colors hover:opacity-80 w-fit cursor-pointer"
                       >
@@ -699,7 +790,7 @@ const ActiveDeliveries = ({ deliveries, wid, localUploads, onUpdateStatus, onUpl
                       <button
                         onClick={() => {
                           activeOrderIdRef.current = { id: delivery._id, type: 'handover' };
-                          wid.current?.open();
+                          setIsCameraModalOpen(true);
                         }}
                         className="bg-[#FFFAEF] border border-[#BA7650] text-[#BA7650] font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-colors hover:opacity-80 w-full cursor-pointer"
                       >
@@ -957,22 +1048,19 @@ const ImageUploadBox = ({ value, onChange, placeholder = "Paste link, upload pho
   );
 };
 
-const TodaysMenu = ({ menu, fetchDashboardData }) => {
+const TodaysMenu = ({ menu, setMyMenu }) => {
   const [deletingId, setDeletingId] = useState(null);
 
   const handleDeleteItem = async (id) => {
     if (!window.confirm("Are you sure you want to delete this dish?")) return;
     setDeletingId(id);
     try {
-      const res = await api.delete(`/meals/${id}`);
-      if (res.status === 200) {
-        toast.success("Meal deleted from menu.");
-        fetchDashboardData();
-      } else {
-        toast.error("Failed to delete meal.");
-      }
+      await deleteMeal(id);
+      toast.success("Dish deleted successfully.");
+      setMyMenu(prev => prev.filter(m => (m._id || m.id) !== id));
     } catch (err) {
-      toast.error("Network error deleting meal.");
+      console.error(err);
+      toast.error("Failed to delete dish.");
     } finally {
       setDeletingId(null);
     }
@@ -1029,7 +1117,7 @@ const RecentDeliveries = ({ deliveries }) => (
         Recent Deliveries
       </h3>
       <span className="text-xs font-bold text-[#D66E73] border border-[#D66E73]/50 rounded-full px-3 py-1 bg-transparent">
-        {deliveries?.length || 3} items
+        {deliveries?.length || 0} items
       </span>
     </div>
 
@@ -1092,8 +1180,6 @@ const RecentReviews = ({ reviews }) => (
 );
 
 const CustomFoodRequestsFeed = ({ requests, onAccept, actionLoadingId }) => {
-  if (!requests || requests.length === 0) return null;
-
   return (
     <div className="w-full flex flex-col gap-5 text-left mb-8">
       <div className="flex justify-between items-center px-2">
@@ -1110,8 +1196,15 @@ const CustomFoodRequestsFeed = ({ requests, onAccept, actionLoadingId }) => {
         </Link>
       </div>
 
-      <div className="flex gap-5 overflow-x-auto pb-4 custom-scrollbar px-2">
-        {requests.map((req, i) => {
+      {!requests || requests.length === 0 ? (
+        <div className="text-center py-16 px-4 bg-[#FFF5EF] rounded-[22px] border border-[#E8D9CF] border-dashed">
+          <span className="text-5xl mb-4 block animate-bounce-slow">🍳</span>
+          <p className="text-[#5D3234] font-bold text-xl mb-2">Kitchen is quiet</p>
+          <p className="text-[#5D3234]/70 text-[16px] font-medium">No requests available right now. Check back later!</p>
+        </div>
+      ) : (
+        <div className="flex gap-5 overflow-x-auto pb-4 custom-scrollbar px-2">
+          {requests.map((req, i) => {
           // Dummy images array to alternate for styling display
           const images = ['/paratha.png', '/chicken_curry.png', '/biryani.png', '/image.png'];
           const imgSource = req.imageUrl || images[i % images.length];
@@ -1164,6 +1257,7 @@ const CustomFoodRequestsFeed = ({ requests, onAccept, actionLoadingId }) => {
           );
         })}
       </div>
+      )}
     </div>
   );
 };
@@ -1229,8 +1323,24 @@ const OrderRequests = ({ requests, onUpdateStatus, actionLoadingId }) => (
   </motion.div>
 );
 
-const PostDishModal = ({ isOpen, onClose, form, setForm, onSubmit, isPublishing }) => {
+const PostDishModal = ({ isOpen, onClose, form, setForm, errors, setErrors, onSubmit, isPublishing }) => {
   if (!isOpen) return null;
+
+  const validateModalField = (field, val) => {
+    let err = null;
+    if (field === 'title') {
+      if (!val || !val.trim()) err = "Dish name is required.";
+      else if (val.trim().length < 3) err = "Must be at least 3 characters.";
+    } else if (field === 'price') {
+      if (val === "" || val === undefined || val === null) err = "Price is required (min ₹20).";
+      else if (isNaN(val)) err = "Please enter a valid price.";
+      else if (Number(val) < 0) err = "Price cannot be negative.";
+      else if (Number(val) < 20) err = "Minimum price must be at least ₹20.";
+    }
+    setErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="bg-[#FCE5E2] border border-[#D66E73]/30 rounded-[24px] p-6 w-full max-w-md shadow-2xl relative">
@@ -1239,15 +1349,65 @@ const PostDishModal = ({ isOpen, onClose, form, setForm, onSubmit, isPublishing 
           <button onClick={onClose} className="p-2 bg-white/50 hover:bg-white border border-[#D66E73]/30 rounded-full text-[#5D3234] transition-colors cursor-pointer"><FiX /></button>
         </div>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <input type="text" placeholder="Dish Name (e.g. Rajma Chawal)" className="w-full px-4 py-3 border border-[#D66E73]/30 rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium" value={form.title} onChange={e => setForm({...form, title: e.target.value})} autoFocus />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-[#5D3234]">Dish Name (Min 3 chars) *</label>
+            <input 
+              type="text" 
+              placeholder="Dish Name (e.g. Rajma Chawal)" 
+              className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium transition-colors ${
+                errors?.title ? 'border-red-500 ring-2 ring-red-400/30' : 'border-[#D66E73]/30'
+              }`} 
+              value={form.title} 
+              onChange={e => {
+                setForm({...form, title: e.target.value});
+                validateModalField('title', e.target.value);
+              }} 
+              onBlur={e => validateModalField('title', e.target.value)}
+              autoFocus 
+            />
+            {errors?.title && (
+              <p className="text-red-600 text-xs font-semibold mt-0.5 text-left flex items-center gap-1">
+                ⚠ {errors.title}
+              </p>
+            )}
+          </div>
           <div className="flex gap-3">
-             <input type="number" placeholder="Price (₹)" className="w-full px-4 py-3 border border-[#D66E73]/30 rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
-             <select className="w-full px-4 py-3 border border-[#D66E73]/30 rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
-                <option value="New">New</option>
-                <option value="Bestseller">Bestseller</option>
-                <option value="Spicy">Spicy</option>
-                <option value="Sweet">Sweet</option>
-             </select>
+             <div className="w-1/2 flex flex-col gap-1">
+                <label className="text-xs font-bold text-[#5D3234]">Price (₹) (Min ₹20) *</label>
+                <input 
+                  type="number" 
+                  placeholder="Min ₹20" 
+                  min="20"
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'e' || e.key === '+') {
+                      e.preventDefault();
+                    }
+                  }}
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium transition-colors ${
+                    errors?.price ? 'border-red-500 ring-2 ring-red-400/30' : 'border-[#D66E73]/30'
+                  }`} 
+                  value={form.price} 
+                  onChange={e => {
+                    setForm({...form, price: e.target.value});
+                    validateModalField('price', e.target.value);
+                  }} 
+                  onBlur={e => validateModalField('price', e.target.value)}
+                />
+                {errors?.price && (
+                  <p className="text-red-600 text-xs font-semibold mt-0.5 text-left flex items-center gap-1">
+                    ⚠ {errors.price}
+                  </p>
+                )}
+             </div>
+             <div className="w-1/2 flex flex-col gap-1">
+                <label className="text-xs font-bold text-[#5D3234]">Tag</label>
+                <select className="w-full px-4 py-2.5 border border-[#D66E73]/30 rounded-xl focus:ring-2 focus:ring-[#BA7650] focus:outline-none bg-white text-[#5D3234] font-medium" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
+                   <option value="New">New</option>
+                   <option value="Bestseller">Bestseller</option>
+                   <option value="Spicy">Spicy</option>
+                   <option value="Sweet">Sweet</option>
+                </select>
+             </div>
           </div>
           <div className="flex flex-col gap-2 bg-white/50 p-3 rounded-xl border border-[#D66E73]/20">
              <label className="text-sm font-bold text-[#5D3234] flex items-center gap-2">

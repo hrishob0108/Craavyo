@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { FiArrowLeft, FiStar, FiArrowRight } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import api from '../services/api';
+import { getMealsByCollege, listenCollegeMeals, getSellerStats, createOrder } from '../services/firestoreService';
 import RequestFoodModal from '../components/RequestFoodModal';
 import defaultMealImage from '../assets/image.png';
 
@@ -32,35 +32,33 @@ const AllMeals = () => {
       navigate('/login');
       return;
     }
-    fetchMeals();
-  }, [user, navigate]);
+    
+    const userCollege = (user?.collegeName || "").trim();
+    const unsubscribe = listenCollegeMeals(userCollege, async (mealsData) => {
+      setMeals(mealsData);
 
-  const fetchMeals = async () => {
-    try {
-      const userCollege = (user?.collegeName || "").trim();
-      const resMeals = await api.get('/meals', {
-        params: userCollege ? { collegeName: userCollege } : {}
-      });
-      setMeals(resMeals.data);
+      const cookIds = [...new Set(mealsData.map(m => {
+        return typeof m.createdBy === 'object' ? (m.createdBy?._id || m.createdBy?.id) : m.createdBy;
+      }).filter(Boolean))];
 
-      const cookIds = [...new Set(resMeals.data.map(m => m.createdBy))];
       const statsMap = {};
       await Promise.all(
         cookIds.map(async (id) => {
           try {
-            const statsRes = await api.get(`/reviews/seller/${id}/stats`);
-            statsMap[id] = statsRes.data;
+            const stats = await getSellerStats(id);
+            statsMap[id] = stats;
           } catch (err) {
             console.error(err);
           }
         })
       );
       setCookStats(statsMap);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to fetch meals");
-    }
-  };
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [user?.collegeName, navigate]);
 
   const handleOrder = (meal) => {
     setSelectedMealForOrder(meal);
@@ -73,21 +71,24 @@ const AllMeals = () => {
         ? (selectedMealForOrder.createdBy._id || selectedMealForOrder.createdBy.id) 
         : selectedMealForOrder.createdBy;
 
-      await api.post('/orders', {
+      await createOrder({
+        buyerId: user?._id || user?.uid,
+        buyerName: user?.name || "Hosteler",
         mealId: selectedMealForOrder._id,
         sellerId: targetSellerId,
         dishName: selectedMealForOrder.title,
         price: selectedMealForOrder.price,
         imageUrl: selectedMealForOrder.image || selectedMealForOrder.imageUrl || '',
         quantity: orderQuantity,
-        notes: notes
+        notes: notes,
+        collegeName: (user?.collegeName || selectedMealForOrder.collegeName || '').trim()
       });
       toast.success("Order placed successfully!");
       setIsRequestModalOpen(false);
       setSelectedMealForOrder(null);
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || "Failed to place order");
+      toast.error(err.message || "Failed to place order");
     }
   };
 
@@ -191,18 +192,24 @@ const AllMeals = () => {
                       <h4 className="font-serif font-bold text-[22px] text-[#412121] leading-tight mb-1 truncate">{meal.title}</h4>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-[13px] text-[#694A42]">By <span className="font-bold text-[#412121]">{meal.cookName || 'Unknown'}</span></span>
-                        <span className="bg-white/80 backdrop-blur-sm border border-[#E7082F]/15 text-[#8C3F3F] text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
-                          {cookStats[meal.createdBy]?.totalReviews > 0 ? (
-                            <>
-                              <FiStar className="w-3 h-3 text-[#DFA460] fill-current" /> {cookStats[meal.createdBy].averageRating.toFixed(1)}
-                              <span className="text-[#8C3F3F]/70 font-medium text-[10px]">({cookStats[meal.createdBy].totalReviews})</span>
-                            </>
-                          ) : (
-                            <span className="text-[#8C3F3F] font-semibold text-[10px] flex items-center gap-0.5">
-                              <span className="text-[#DFA460]">✨</span> New Cook
+                        {(() => {
+                          const cookId = typeof meal.createdBy === 'object' ? (meal.createdBy?._id || meal.createdBy?.id) : meal.createdBy;
+                          const stats = cookStats[cookId];
+                          return (
+                            <span className="bg-white/80 backdrop-blur-sm border border-[#E7082F]/15 text-[#8C3F3F] text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                              {stats?.totalReviews > 0 ? (
+                                <>
+                                  <FiStar className="w-3 h-3 text-[#DFA460] fill-current" /> {stats.averageRating.toFixed(1)}
+                                  <span className="text-[#8C3F3F]/70 font-medium text-[10px]">({stats.totalReviews})</span>
+                                </>
+                              ) : (
+                                <span className="text-[#8C3F3F] font-semibold text-[10px] flex items-center gap-0.5">
+                                  <span className="text-[#DFA460]">✨</span> New Cook
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </span>
+                          );
+                        })()}
                       </div>
                     </div>
                     

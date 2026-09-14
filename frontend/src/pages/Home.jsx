@@ -54,9 +54,7 @@ const Home = () => {
         className="fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl bg-white/85 backdrop-blur-lg px-8 py-3 rounded-full border border-white/50 z-50 flex justify-between items-center shadow-[0_15px_35px_rgba(60,34,34,0.08)]"
       >
         <div className="flex items-center gap-3 cursor-pointer">
-          <span className="text-2xl font-serif font-black tracking-tight text-espresso">
-            Craavyo<span className="text-primary">.</span>
-          </span>
+          <img src="/logo.png" alt="Craavyo Logo" className="h-12 md:h-16 w-auto" />
         </div>
 
         {/* Center Links in a sub-capsule dock */}
@@ -971,9 +969,7 @@ const Home = () => {
           
           {/* Brand info */}
           <div className="flex flex-col items-start gap-4">
-            <span className="text-[28px] font-serif font-black text-white tracking-tight">
-              Craavyo
-            </span>
+            <img src="/logo.png" alt="Craavyo Logo" className="h-16 w-auto" />
             <p className="text-[11px] font-medium leading-relaxed opacity-80 pr-4">
               Connecting hostelers with home-cooked meals. Taste the love of home, right at your campus.
             </p>

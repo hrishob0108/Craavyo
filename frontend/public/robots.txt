@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Allow: /home
+Allow: /login
+Allow: /register
+
+# Disallow private dashboard routes from being indexed
+Disallow: /dashboard
+Disallow: /dayscholar-dashboard
+Disallow: /hosteler-dashboard
+Disallow: /all-meals
+Disallow: /all-requests
+Disallow: /post-dish
+Disallow: /track-orders
+Disallow: /select-role
+
+Sitemap: https://craavyo.com/sitemap.xml

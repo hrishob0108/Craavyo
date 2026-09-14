@@ -88,3 +88,15 @@ input[type="checkbox"] {
 .animate-bounce-slow {
   animation: bounce-slow 3.5s ease-in-out infinite;
 }
+
+/* Remove permanent Google reCAPTCHA badge icon from bottom-right corner */
+.grecaptcha-badge {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  left: -9999px !important;
+  bottom: -9999px !important;
+  display: none !important;
+  z-index: -9999 !important;
+}

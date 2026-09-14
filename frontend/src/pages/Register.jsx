@@ -3,7 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaGraduationCap } from "react-icons/fa";
 import { FiUser, FiMail, FiLock, FiEye, FiEyeOff, FiHome, FiArrowLeft, FiLoader } from "react-icons/fi";
-import api from "../services/api";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { auth } from "../firebase";
+import { createUserProfile } from "../services/firestoreService";
+import toast from "react-hot-toast";
 import GOO from "../firebase";
 
 const Register = () => {
@@ -56,18 +59,48 @@ const Register = () => {
     if (validate()) {
       setIsLoading(true);
       try {
-        const response = await api.post("/auth/register", formData);
-        const data = response.data;
-        if (response.status === 200 || response.status === 201) {
-          sessionStorage.setItem("user", JSON.stringify(data));
-          sessionStorage.setItem("currentUser", JSON.stringify(data));
-          navigate("/dashboard");
-        } else {
-          setErrors({ api: data.message || "Registration failed" });
-        }
+        const userCredential = await createUserWithEmailAndPassword(
+          auth, 
+          formData.email.trim(), 
+          formData.password
+        );
+        const firebaseUser = userCredential.user;
+
+        await updateProfile(firebaseUser, { displayName: formData.name.trim() });
+
+        const profileData = {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          role: formData.role,
+          phone: formData.phone || "",
+          collegeName: formData.collegeName || "",
+          isPhoneVerified: false,
+          state: "",
+          district: "",
+        };
+
+        const savedUser = await createUserProfile(firebaseUser.uid, profileData);
+
+        sessionStorage.setItem("user", JSON.stringify(savedUser));
+        sessionStorage.setItem("currentUser", JSON.stringify(savedUser));
+        toast.success("Account created successfully!");
+        navigate("/dashboard");
       } catch (error) {
-        console.error("Registration Error:", error);
-        setErrors({ api: error.response?.data?.message || "Something went wrong. Please try again." });
+        console.error("Firebase Registration Error:", error);
+        let errorMsg = "Something went wrong. Please try again.";
+        if (error.code === "auth/email-already-in-use") {
+          errorMsg = "This email is already registered. Please log in.";
+        } else if (error.code === "auth/invalid-email") {
+          errorMsg = "Invalid email address format.";
+        } else if (error.code === "auth/weak-password") {
+          errorMsg = "Password should be at least 6 characters.";
+        } else if (error.code === "auth/operation-not-allowed") {
+          errorMsg = "Email/Password sign-in is not enabled in Firebase Console. Please enable it under Authentication > Sign-in method.";
+        } else if (error.message) {
+          errorMsg = error.message;
+        }
+        setErrors({ api: errorMsg });
+        toast.error(errorMsg);
       } finally {
         setIsLoading(false);
       }
@@ -110,6 +143,7 @@ const Register = () => {
       >
         {/* Card Header */}
         <div className="text-center mb-5">
+          <img src="/logo.png" alt="Craavyo" className="h-16 sm:h-20 w-auto mx-auto mb-4" />
           <h1 className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-white mb-1">
             Create Account
           </h1>

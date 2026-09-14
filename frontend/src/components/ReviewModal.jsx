@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiX, FiStar, FiActivity } from 'react-icons/fi';
 import toast from 'react-hot-toast';
-import api from '../services/api';
+import { createReview } from '../services/firestoreService';
 
 const overlayVariants = {
   hidden: { opacity: 0 },
@@ -33,26 +33,27 @@ const ReviewModal = ({ isOpen, onClose, order, onReviewSubmitted }) => {
 
     try {
       setSubmitting(true);
-      const res = await api.post('/reviews', {
+      const user = JSON.parse(sessionStorage.getItem('currentUser'));
+      const review = await createReview({
+        reviewer: user?._id || user?.uid,
+        reviewerName: user?.name || "Student",
         reviewedUser: order.sellerId,
-        orderId: order._id,
-        meal: order.mealId || null, // Optional for custom requests
+        orderId: order._id || order.id,
+        meal: order.mealId || null,
         rating,
         comment
       });
 
-      if (res.status === 200 || res.status === 201) {
-        toast.success("Review submitted! Thank you. ❤️");
-        onReviewSubmitted(res.data);
-        setRating(0);
-        setComment('');
-        onClose();
-      } else {
-        toast.error("Failed to submit review.");
+      toast.success("Review submitted! Thank you. ❤️");
+      if (onReviewSubmitted) {
+        onReviewSubmitted(review);
       }
+      setRating(0);
+      setComment('');
+      onClose();
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.error || "Error submitting review.");
+      toast.error(err.message || "Error submitting review.");
     } finally {
       setSubmitting(false);
     }

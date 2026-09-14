@@ -1,0 +1,146 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // CORE SECURITY FUNCTIONS & RBAC ENFORCEMENT
+    // ===============================================================
+
+    // Check if the caller is authenticated with Firebase Auth
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the caller matches the document owner UID
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if the caller is an active administrator in the admins collection
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == 'active';
+    }
+
+    // Check if the caller is a top-level Founder
+    function isFounder() {
+      return isAdmin() && (
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'founder' ||
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'founder_ceo'
+      );
+    }
+
+    // ===============================================================
+    // 1. ADMIN DIRECTORY & GOVERNANCE (/admins)
+    // ===============================================================
+    match /admins/{adminId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isFounder();
+      allow update: if isAdmin();
+    }
+
+    // ===============================================================
+    // 2. STUDENT DIRECTORIES (/hostelers & /dayscholars)
+    // ===============================================================
+    match /hostelers/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /dayscholars/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // 3. MEAL LISTINGS & MENUS (/meals)
+    // ===============================================================
+    match /meals/{mealId} {
+      allow read: if true;
+      allow create: if isAuthenticated() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.price is number &&
+        request.resource.data.price >= 20;
+      allow update: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ===============================================================
+    // 4. CUSTOM CRAVING REQUESTS (/foodRequests)
+    // ===============================================================
+    match /foodRequests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.buyerId == request.auth.uid &&
+        request.resource.data.price is number &&
+        request.resource.data.price >= 20;
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() && (
+        resource.data.buyerId == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ===============================================================
+    // 5. ORDERS & DELIVERY LIFECYCLE (/orders)
+    // ===============================================================
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.buyerId == request.auth.uid &&
+        request.resource.data.price is number &&
+        request.resource.data.price >= 20;
+      allow update: if isAuthenticated() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // 6. REVIEWS & RATINGS (/reviews)
+    // ===============================================================
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated() &&
+        request.resource.data.reviewer == request.auth.uid &&
+        request.resource.data.rating is number &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5;
+      allow update, delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // 7. CAMPUS BROADCASTS (/announcements)
+    // ===============================================================
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ===============================================================
+    // 8. AUDIT LOGS (/auditLogs)
+    // ===============================================================
+    match /auditLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

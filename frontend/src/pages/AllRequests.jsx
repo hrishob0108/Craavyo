@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { FiArrowLeft, FiMapPin, FiLoader } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import api from '../services/api';
+import { listenCollegeFoodRequests, acceptFoodRequest } from '../services/firestoreService';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -23,32 +23,27 @@ const AllRequests = () => {
       navigate('/login');
       return;
     }
-    fetchRequests();
-  }, [user, navigate]);
+    
+    const userCollege = (user?.collegeName || "").trim();
+    const unsubscribe = listenCollegeFoodRequests(userCollege, (reqs) => {
+      setRequests(reqs);
+    });
 
-  const fetchRequests = async () => {
-    try {
-      const userCollege = (user?.collegeName || "").trim();
-      const resPendingRequests = await api.get('/food-requests/pending', {
-        params: userCollege ? { collegeName: userCollege } : {}
-      });
-      setRequests(resPendingRequests.data);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to fetch requests");
-    }
-  };
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [user?.collegeName, navigate]);
 
   const handleAcceptRequest = async (requestId) => {
     try {
       setActionLoadingId(`accept_${requestId}`);
-      await api.put(`/food-requests/${requestId}/accept`);
+      await acceptFoodRequest(requestId, user);
       toast.success("Request accepted! Check your active deliveries.");
       // Remove it from the local list since it's no longer pending
       setRequests(prev => prev.filter(r => r._id !== requestId));
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || "Failed to accept request");
+      toast.error(err.message || "Failed to accept request");
     } finally {
       setActionLoadingId(null);
     }

@@ -6,7 +6,7 @@ const { getCollegeRoom, escapeRegex } = require("../utils/collegeHelper");
 // @route   POST /api/food-requests
 // @access  Private
 const createFoodRequest = async (req, res) => {
-  const { dishName, description, price, deliveryLocation, neededBy } = req.body;
+  const { tag, isVeg, dishName, description, servings, price, imageUrl, deliveryLocation, neededBy } = req.body;
 
   if (req.user.role !== "hosteler") {
     return res.status(403).json({ message: "Only hostelers can request food." });
@@ -25,9 +25,13 @@ const createFoodRequest = async (req, res) => {
     const foodRequest = new FoodRequest({
       buyerId: req.user._id,
       buyerName: req.user.name,
+      tag: tag || "Lunch",
+      isVeg: isVeg !== undefined ? isVeg : true,
       dishName,
       description,
+      servings: Number(servings) || 1,
       price,
+      imageUrl: imageUrl || "",
       deliveryLocation,
       collegeName: userCollege,
       neededBy,

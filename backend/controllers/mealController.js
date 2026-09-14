@@ -30,7 +30,7 @@ const getMeals = async (req, res) => {
 // @route   POST /api/meals
 // @access  Private (Dayscholars)
 const createMeal = async (req, res) => {
-  const { title, description, price, image, tag, isVeg } = req.body;
+  const { title, description, price, image, tag, isVeg, spicyLevel, servings, readyBy, pickupPoint, dishes } = req.body;
 
   try {
     if(req.user.role !== "dayscholar") {
@@ -49,6 +49,11 @@ const createMeal = async (req, res) => {
       image,
       tag,
       isVeg: isVeg !== undefined ? isVeg : true,
+      spicyLevel,
+      servings,
+      readyBy,
+      pickupPoint,
+      dishes: dishes || [],
       cookName: req.user.name,
       collegeName: userCollege,
       createdBy: req.user._id,

@@ -58,4 +58,35 @@ userSchema.pre("save", async function (next) {
   this.password = await bcrypt.hash(this.password, salt);
 });
 
+// Cascade delete related documents when a user is deleted
+userSchema.pre('findOneAndDelete', async function(next) {
+  const userId = this.getQuery()['_id'];
+  if (userId) {
+    try {
+      await mongoose.model('Meal').deleteMany({ createdBy: userId });
+      await mongoose.model('Order').deleteMany({ $or: [{ buyerId: userId }, { sellerId: userId }] });
+      await mongoose.model('FoodRequest').deleteMany({ buyerId: userId });
+      await mongoose.model('Review').deleteMany({ $or: [{ reviewer: userId }, { reviewedUser: userId }] });
+    } catch (err) {
+      console.error("Error cascading deletes for user:", err);
+    }
+  }
+  next();
+});
+
+userSchema.pre('deleteOne', { document: true, query: false }, async function(next) {
+  const userId = this._id;
+  if (userId) {
+    try {
+      await mongoose.model('Meal').deleteMany({ createdBy: userId });
+      await mongoose.model('Order').deleteMany({ $or: [{ buyerId: userId }, { sellerId: userId }] });
+      await mongoose.model('FoodRequest').deleteMany({ buyerId: userId });
+      await mongoose.model('Review').deleteMany({ $or: [{ reviewer: userId }, { reviewedUser: userId }] });
+    } catch (err) {
+      console.error("Error cascading deletes for user:", err);
+    }
+  }
+  next();
+});
+
 module.exports = mongoose.model("User", userSchema);

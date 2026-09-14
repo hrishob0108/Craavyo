@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowRight, FiPackage, FiActivity, FiAlertTriangle } from 'react-icons/fi';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import api from '../services/api';
-import { useSocket } from '../context/SocketContext';
+import { listenHostelerOrders } from '../services/firestoreService';
 import cravyoHero from '/cravyo_hero_thali.png';
 
 // Animation configs
@@ -20,11 +19,12 @@ const itemVariants = {
 
 const TrackOrders = () => {
   const navigate = useNavigate();
-  const socket = useSocket();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const user = JSON.parse(sessionStorage.getItem('currentUser'));
+
+  const prevStatusesRef = React.useRef(null);
 
   useEffect(() => {
     if (!user || !user.token) {
@@ -35,37 +35,27 @@ const TrackOrders = () => {
       navigate('/login');
       return;
     }
-    fetchActiveOrders();
-  }, []);
 
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleOrderStatusUpdated = (updatedOrder) => {
-      toast.success(`"${updatedOrder.dishName}" status updated to: ${updatedOrder.status}`);
-      setOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
-      fetchActiveOrders();
-    };
-
-    socket.on('order_status_updated', handleOrderStatusUpdated);
+    const hostelerId = user._id || user.uid;
+    setLoading(true);
+    const unsubscribe = listenHostelerOrders(hostelerId, (liveOrders) => {
+      if (prevStatusesRef.current) {
+        liveOrders.forEach(o => {
+          const prev = prevStatusesRef.current.get(o._id);
+          if (prev && prev !== o.status) {
+            toast.success(`"${o.dishName}" status updated to: ${o.status}!`, { duration: 6000 });
+          }
+        });
+      }
+      prevStatusesRef.current = new Map(liveOrders.map(o => [o._id, o.status]));
+      setOrders(liveOrders);
+      setLoading(false);
+    });
 
     return () => {
-      socket.off('order_status_updated', handleOrderStatusUpdated);
+      if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, [socket]);
-
-  const fetchActiveOrders = async () => {
-    try {
-      setLoading(true);
-      const res = await api.get('/orders/my-orders');
-      setOrders(res.data);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to load active orders.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [user?._id, user?.uid, navigate]);
 
   const activeOrders = orders.filter(o => o.status !== 'Delivered' && o.status !== 'Declined');
   const steps = ['Pending', 'Accepted', 'Preparing', 'Out for Delivery'];

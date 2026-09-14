@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiX, FiPlus, FiDollarSign, FiMapPin, FiClock, FiActivity } from 'react-icons/fi';
 import toast from 'react-hot-toast';
-import api from '../services/api';
+import { createFoodRequest } from '../services/firestoreService';
 
 const modalVariants = {
   hidden: { opacity: 0, scale: 0.9, y: 20 },
@@ -24,45 +24,106 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
     neededBy: '',
     deliveryLocation: ''
   });
+  const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+
+  const handleClose = () => {
+    setErrors({});
+    onClose();
+  };
+
+  const validateField = (field, val) => {
+    let err = null;
+    if (field === 'dishName') {
+      if (!val || !val.trim()) err = "Dish name is required.";
+      else if (val.trim().length < 3) err = "Must be at least 3 characters.";
+    } else if (field === 'price') {
+      if (val === "" || val === undefined || val === null) err = "Budget is required (min ₹20).";
+      else if (isNaN(val)) err = "Please enter a valid amount.";
+      else if (Number(val) < 0) err = "Price cannot be negative.";
+      else if (Number(val) < 20) err = "Minimum price must be at least ₹20.";
+    } else if (field === 'neededBy') {
+      if (!val || !val.trim()) err = "Needed by time is required.";
+    } else if (field === 'deliveryLocation') {
+      if (!val || !val.trim()) err = "Delivery location is required.";
+      else if (val.trim().length < 3) err = "Must be at least 3 characters.";
+    }
+    setErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
+  const validateForm = () => {
+    const errs = {};
+    if (!form.dishName.trim()) {
+      errs.dishName = "Dish name is required.";
+    } else if (form.dishName.trim().length < 3) {
+      errs.dishName = "Must be at least 3 characters.";
+    }
+
+    if (form.price === "" || form.price === undefined || form.price === null) {
+      errs.price = "Budget is required (min ₹20).";
+    } else if (isNaN(form.price)) {
+      errs.price = "Please enter a valid amount.";
+    } else if (Number(form.price) < 0) {
+      errs.price = "Price cannot be negative.";
+    } else if (Number(form.price) < 20) {
+      errs.price = "Minimum price must be at least ₹20.";
+    }
+
+    if (!form.neededBy.trim()) {
+      errs.neededBy = "Needed by time is required.";
+    }
+
+    if (!form.deliveryLocation.trim()) {
+      errs.deliveryLocation = "Delivery location is required.";
+    } else if (form.deliveryLocation.trim().length < 3) {
+      errs.deliveryLocation = "Must be at least 3 characters.";
+    }
+
+    setErrors(errs);
+    return errs;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.dishName || !form.price || !form.deliveryLocation || !form.neededBy) {
-      return toast.error("Please fill in all required fields.");
-    }
-    
-    if (isNaN(form.price) || Number(form.price) <= 0) {
-      return toast.error("Please enter a valid price.");
+    const formErrors = validateForm();
+    if (Object.keys(formErrors).length > 0) {
+      return toast.error(Object.values(formErrors)[0]);
     }
 
     try {
       setSubmitting(true);
-      const res = await api.post('/food-requests', {
-        dishName: form.dishName,
-        description: form.description,
+      const user = JSON.parse(sessionStorage.getItem('currentUser'));
+      const userId = user?._id || user?.uid;
+      const userCollege = (user?.collegeName || "").trim();
+
+      const newReq = await createFoodRequest({
+        buyerId: userId,
+        buyerName: user?.name || "Hosteler",
+        collegeName: userCollege,
+        dishName: form.dishName.trim(),
+        description: form.description.trim(),
         price: Number(form.price),
-        deliveryLocation: form.deliveryLocation,
-        neededBy: form.neededBy
+        deliveryLocation: form.deliveryLocation.trim(),
+        neededBy: form.neededBy.trim()
       });
 
-      if (res.status === 200 || res.status === 201) {
-        toast.success(`Requested ${form.dishName} successfully!`);
-        onRequestCreated(res.data);
-        setForm({
-          dishName: '',
-          description: '',
-          price: '',
-          neededBy: '',
-          deliveryLocation: ''
-        });
-        onClose();
-      } else {
-        toast.error("Failed to post custom request.");
+      toast.success(`Requested ${form.dishName} successfully!`);
+      if (onRequestCreated) {
+        onRequestCreated(newReq);
       }
+      setForm({
+        dishName: '',
+        description: '',
+        price: '',
+        neededBy: '',
+        deliveryLocation: ''
+      });
+      setErrors({});
+      onClose();
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || "Something went wrong.");
+      toast.error(err.message || "Failed to submit request.");
     } finally {
       setSubmitting(false);
     }
@@ -78,7 +139,7 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
             initial="hidden"
             animate="visible"
             exit="exit"
-            onClick={onClose}
+            onClick={handleClose}
             className="fixed inset-0 bg-black/75 backdrop-blur-md"
           />
 
@@ -102,7 +163,7 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                 </h3>
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors"
               >
                 <FiX className="w-5 h-5" />
@@ -110,7 +171,7 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
+            <form onSubmit={handleSubmit} className="space-y-5 relative z-10" noValidate>
               {/* Dish Name */}
               <div>
                 <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
@@ -118,12 +179,22 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Paneer Butter Masala & Roti"
+                  placeholder="e.g. Paneer Butter Masala & Roti (min 3 chars)"
                   value={form.dishName}
-                  onChange={(e) => setForm({ ...form, dishName: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20 focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner"
-                  required
+                  onChange={(e) => {
+                    setForm({ ...form, dishName: e.target.value });
+                    validateField('dishName', e.target.value);
+                  }}
+                  onBlur={(e) => validateField('dishName', e.target.value)}
+                  className={`w-full px-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
+                    errors.dishName ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
+                  }`}
                 />
+                {errors.dishName && (
+                  <p className="text-red-600 text-xs font-semibold mt-1 ml-1 text-left flex items-center gap-1">
+                    ⚠ {errors.dishName}
+                  </p>
+                )}
               </div>
 
               {/* Description */}
@@ -144,19 +215,35 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-gray-700 text-sm font-bold mb-2 ml-1">
-                    Your Budget (₹) *
+                    Budget (₹) *
                   </label>
                   <div className="relative flex items-center">
                     <FiDollarSign className="absolute left-4 text-gray-400 font-bold" />
                     <input
                       type="number"
-                      placeholder="Price"
+                      placeholder="Min ₹20"
+                      min="20"
+                      onKeyDown={(e) => {
+                        if (e.key === '-' || e.key === 'e' || e.key === '+') {
+                          e.preventDefault();
+                        }
+                      }}
                       value={form.price}
-                      onChange={(e) => setForm({ ...form, price: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20 focus:outline-none focus:ring-4 transition-all font-bold text-base shadow-inner"
-                      required
+                      onChange={(e) => {
+                        setForm({ ...form, price: e.target.value });
+                        validateField('price', e.target.value);
+                      }}
+                      onBlur={(e) => validateField('price', e.target.value)}
+                      className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-bold text-base shadow-inner ${
+                        errors.price ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
+                      }`}
                     />
                   </div>
+                  {errors.price && (
+                    <p className="text-red-600 text-xs font-semibold mt-1 ml-1 text-left flex items-center gap-1">
+                      ⚠ {errors.price}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -169,11 +256,21 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                       type="text"
                       placeholder="e.g. 8:30 PM"
                       value={form.neededBy}
-                      onChange={(e) => setForm({ ...form, neededBy: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20 focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner"
-                      required
+                      onChange={(e) => {
+                        setForm({ ...form, neededBy: e.target.value });
+                        validateField('neededBy', e.target.value);
+                      }}
+                      onBlur={(e) => validateField('neededBy', e.target.value)}
+                      className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
+                        errors.neededBy ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
+                      }`}
                     />
                   </div>
+                  {errors.neededBy && (
+                    <p className="text-red-600 text-xs font-semibold mt-1 ml-1 text-left flex items-center gap-1">
+                      ⚠ {errors.neededBy}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -188,11 +285,21 @@ const RequestFoodModal = ({ isOpen, onClose, onRequestCreated }) => {
                     type="text"
                     placeholder="e.g. Room 405, Hostel C"
                     value={form.deliveryLocation}
-                    onChange={(e) => setForm({ ...form, deliveryLocation: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20 focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner"
-                    required
+                    onChange={(e) => {
+                      setForm({ ...form, deliveryLocation: e.target.value });
+                      validateField('deliveryLocation', e.target.value);
+                    }}
+                    onBlur={(e) => validateField('deliveryLocation', e.target.value)}
+                    className={`w-full pl-10 pr-4 py-3.5 bg-gray-50 text-gray-800 rounded-xl border focus:outline-none focus:ring-4 transition-all font-medium text-base shadow-inner ${
+                      errors.deliveryLocation ? 'border-red-400 ring-2 ring-red-400/20' : 'border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20'
+                    }`}
                   />
                 </div>
+                {errors.deliveryLocation && (
+                  <p className="text-red-600 text-xs font-semibold mt-1 ml-1 text-left flex items-center gap-1">
+                    ⚠ {errors.deliveryLocation}
+                  </p>
+                )}
               </div>
 
               {/* Submit Button */}

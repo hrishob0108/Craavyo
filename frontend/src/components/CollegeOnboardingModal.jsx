@@ -6,6 +6,7 @@ import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../firebase";
 import toast from "react-hot-toast";
 import api from "../services/api";
+import { saveCollegeOnboarding } from "../services/firestoreService";
 import collegesHierarchy from "../data/collegesHierarchy.json";
 
 const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
@@ -68,7 +69,7 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
     return results;
   }, [searchQuery]);
 
-  // Cleanup recaptcha on unmount
+  // Cleanup recaptcha and badge on unmount
   useEffect(() => {
     return () => {
       if (window.recaptchaVerifier) {
@@ -77,6 +78,8 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
         } catch (e) {}
         window.recaptchaVerifier = null;
       }
+      const badges = document.querySelectorAll(".grecaptcha-badge");
+      badges.forEach((b) => b.remove());
     };
   }, []);
 
@@ -127,7 +130,7 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
       setOtpSent(true);
       toast.success(`SMS OTP sent via Firebase to ${formattedPhone}! Check your phone.`, { duration: 7000 });
     } catch (err) {
-      console.warn("Firebase Phone Auth Error, falling back to Backend SMS Service:", err);
+      console.warn("Firebase Phone Auth Error:", err);
       // Reset verifier on error so retry works cleanly
       if (window.recaptchaVerifier) {
         try {
@@ -153,7 +156,7 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
         }
       } catch (backendErr) {
         console.error("Backend OTP Dispatch Error:", backendErr);
-        const msg = backendErr.response?.data?.message || "Failed to send SMS OTP. Please check your network or server.";
+        const msg = backendErr.response?.data?.message || err?.message || "Failed to send SMS OTP. Please check your network or server.";
         setErrorMsg(msg);
         toast.error(msg, { duration: 9000 });
       }
@@ -162,7 +165,7 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
     }
   };
 
-  // Handle Verify Real Mobile SMS OTP via Firebase or Backend Service
+  // Handle Verify Real Mobile SMS OTP via Firebase Auth
   const handleVerifyOtp = async () => {
     const cleanPhone = phone.replace(/\D/g, "");
     if (!otpInput.trim()) {
@@ -173,7 +176,7 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
     setIsVerifyingOtp(true);
     setErrorMsg("");
 
-    // 1. If Firebase session is active, try Firebase verification
+    // 1. If Firebase confirmation session is active
     if (window.confirmationResult) {
       try {
         const result = await window.confirmationResult.confirm(otpInput.trim());
@@ -186,8 +189,13 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
           return;
         }
       } catch (fbErr) {
-        console.warn("Firebase confirmation failed, attempting backend verification:", fbErr);
+        console.warn("Firebase confirmation failed:", fbErr);
+        setErrorMsg("Invalid OTP code. Please check the code sent to your phone.");
+        toast.error("Invalid OTP code. Please try again.");
+      } finally {
+        setIsVerifyingOtp(false);
       }
+      return;
     }
 
     // 2. Fallback / direct verification via Backend OTP endpoint
@@ -266,26 +274,41 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
     setErrorMsg("");
 
     try {
-      const response = await api.put("/auth/college", {
+      const uid = user?._id || user?.uid || auth.currentUser?.uid;
+      if (!uid) {
+        setErrorMsg("User session not found. Please log in again.");
+        return;
+      }
+
+      const updatedUser = await saveCollegeOnboarding(uid, {
         state: selectedState,
         district: selectedDistrict,
         collegeName: selectedCollege,
         phone: phone.trim(),
         isPhoneVerified: true,
       });
-
-      const updatedUser = response.data;
       
       // Update sessionStorage
       sessionStorage.setItem("user", JSON.stringify(updatedUser));
       sessionStorage.setItem("currentUser", JSON.stringify(updatedUser));
+
+      toast.success("College profile saved successfully!");
+
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (e) {}
+        window.recaptchaVerifier = null;
+      }
+      const badges = document.querySelectorAll(".grecaptcha-badge");
+      badges.forEach((b) => b.remove());
 
       if (onCollegeSelected) {
         onCollegeSelected(updatedUser);
       }
     } catch (err) {
       console.error("Profile Onboarding Error:", err);
-      setErrorMsg(err.response?.data?.message || "Failed to update profile. Please try again.");
+      setErrorMsg(err.message || "Failed to update profile. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

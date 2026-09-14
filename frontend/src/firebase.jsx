@@ -1,22 +1,25 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 import { useNavigate } from "react-router-dom";
-import api from "./services/api";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+export const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDKLjHB8vvxX9maZ-tdaNiwZOe6QaBNTAY",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "craavyo-aa5c9.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "craavyo-aa5c9",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "craavyo-aa5c9.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "362945669966",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:362945669966:web:b89cdfcc88b05de35b8c1f",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-R2FW2S5P49"
 };
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
 const provider = new GoogleAuthProvider();
 
 function GOO() {
@@ -25,30 +28,82 @@ function GOO() {
   const sign = () => {
     signInWithPopup(auth, provider)
       .then(async (res) => {
-        const userData = {
-          name: res.user.displayName,
-          email: res.user.email,
-          photo: res.user.photoURL,
-        };
-
         try {
-          // Attempt auth with backend without specifying role to see if user exists
-          const response = await api.post("/auth/google", { name: userData.name, email: userData.email });
-          if (response.status === 200 || response.status === 201) {
-            sessionStorage.setItem("currentUser", JSON.stringify(response.data));
-            navigate("/dashboard");
+          // Check partitioned collections: hostelers, dayscholars strictly
+          let profile = null;
+          const hostelerSnap = await getDoc(doc(db, "hostelers", res.user.uid));
+          if (hostelerSnap.exists()) {
+            profile = hostelerSnap.data();
+          } else {
+            const dayscholarSnap = await getDoc(doc(db, "dayscholars", res.user.uid));
+            if (dayscholarSnap.exists()) {
+              profile = dayscholarSnap.data();
+            } else {
+              // Check if this account belongs to an administrator
+              const adminSnap = await getDoc(doc(db, "admins", res.user.uid));
+              const founderEmails = (
+                import.meta.env.VITE_FOUNDER_EMAILS ||
+                "hrishobp@gmail.com,naveenpavurala2005@gmail.com"
+              )
+                .split(",")
+                .map((em) => em.trim().toLowerCase());
+              const userEmail = (res.user.email || "").trim().toLowerCase();
+              const isFounder = founderEmails.includes(userEmail);
+
+              if (adminSnap.exists() || isFounder) {
+                await signOut(auth);
+                sessionStorage.removeItem("user");
+                sessionStorage.removeItem("currentUser");
+                toast.error(
+                  "Administrative accounts must log in via the Executive Command Center (/admin/login).",
+                  { duration: 6000 }
+                );
+                navigate("/admin/login");
+                return;
+              }
+            }
           }
-        } catch (err) {
-          if (err.response && err.response.status === 400 && err.response.data.message === "Role is required for new Google users") {
+
+          if (profile && profile.role && ["hosteler", "dayscholar"].includes(profile.role)) {
+            const token = await res.user.getIdToken();
+            const currentUser = {
+              _id: res.user.uid,
+              uid: res.user.uid,
+              name: profile.name || res.user.displayName,
+              email: profile.email || res.user.email,
+              role: profile.role,
+              phone: profile.phone || "",
+              isPhoneVerified: Boolean(profile.isPhoneVerified),
+              state: profile.state || "",
+              district: profile.district || "",
+              collegeName: profile.collegeName || "",
+              token: token
+            };
+            sessionStorage.setItem("user", JSON.stringify(currentUser));
+            sessionStorage.setItem("currentUser", JSON.stringify(currentUser));
+            navigate("/dashboard");
+          } else {
+            // No role assigned yet: save temp user and route to role selection
+            const userData = {
+              uid: res.user.uid,
+              name: res.user.displayName || "Student",
+              email: res.user.email,
+              photo: res.user.photoURL,
+            };
             sessionStorage.setItem("googleUser", JSON.stringify(userData));
             navigate("/select-role");
-          } else {
-            console.error("Google Sign-In Auth Error:", err);
-            toast.error(err.response?.data?.message || "Failed to authenticate with backend.");
           }
+        } catch (err) {
+          console.error("Google Sign-In Firestore Sync Error:", err);
+          toast.error("Failed to sync profile with database. Please try again.");
         }
       })
-      .catch((err) => console.error("Google Sign-In Error:", err));
+      .catch((err) => {
+        console.error("Google Sign-In Error:", err);
+        if (err.code !== "auth/popup-closed-by-user") {
+          toast.error(err.message || "Google Sign-In failed.");
+        }
+      });
   };
 
   return (

@@ -596,16 +596,7 @@ const AdminDashboard = () => {
             ))}
           </div>
 
-          {/* Provision Button for Founder / National Head */}
-          {admin.role !== "state_head" && (
-            <button
-              onClick={() => setIsCreateHeadOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#8C3F3F] to-[#E8AE68] hover:opacity-95 text-white font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer"
-            >
-              <FiPlus className="w-4 h-4" />
-              <span>Provision New Head</span>
-            </button>
-          )}
+
         </section>
 
         {/* Tab 1: Overview & Analytics */}

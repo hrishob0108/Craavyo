@@ -48,6 +48,7 @@ import AdminMealsTab from "../../components/Admin/AdminMealsTab";
 import AdminCravingsTab from "../../components/Admin/AdminCravingsTab";
 import AdminFinancialsTab from "../../components/Admin/AdminFinancialsTab";
 import AdminBroadcastTab from "../../components/Admin/AdminBroadcastTab";
+import AdminVerifyCampusModal from "../../components/Admin/AdminVerifyCampusModal";
 import toast from "react-hot-toast";
 
 const AdminDashboard = () => {
@@ -242,20 +243,51 @@ const AdminDashboard = () => {
     }
   };
 
-  // Filtered Campuses based on search
-  const filteredCampuses = useMemo(() => {
-    if (!metrics?.collegeMap) return [];
-    const colleges = Object.entries(metrics.collegeMap).map(([name, count]) => ({
+  // Filtered Campuses based on search & verification status
+  const [campusFilterTab, setCampusFilterTab] = useState("all"); // "all", "verified", "pending"
+  const [selectedCampusForModeration, setSelectedCampusForModeration] = useState(null);
+
+  const allProcessedCampuses = useMemo(() => {
+    if (!metrics?.campusDetailsMap) return { verified: [], pending: [], all: [] };
+    const verified = Object.entries(metrics.verifiedCollegeMap || {}).map(([name, count]) => ({
       name,
       count,
+      isVerified: true,
+      state: metrics.campusDetailsMap[name]?.state || "Official",
+      district: metrics.campusDetailsMap[name]?.district || "Official",
     }));
 
+    const pending = Object.entries(metrics.pendingCollegeMap || {}).map(([name, count]) => ({
+      name,
+      count,
+      isVerified: false,
+      state: metrics.campusDetailsMap[name]?.state || "Not Specified",
+      district: metrics.campusDetailsMap[name]?.district || "Not Specified",
+    }));
+
+    return {
+      verified: verified.sort((a, b) => b.count - a.count),
+      pending: pending.sort((a, b) => b.count - a.count),
+      all: [...verified, ...pending].sort((a, b) => b.count - a.count),
+    };
+  }, [metrics?.verifiedCollegeMap, metrics?.pendingCollegeMap, metrics?.campusDetailsMap]);
+
+  const filteredCampuses = useMemo(() => {
+    let list = [];
+    if (campusFilterTab === "verified") {
+      list = allProcessedCampuses.verified || [];
+    } else if (campusFilterTab === "pending") {
+      list = allProcessedCampuses.pending || [];
+    } else {
+      list = allProcessedCampuses.all || [];
+    }
+
     if (!campusSearchQuery.trim()) {
-      return colleges.sort((a, b) => b.count - a.count);
+      return list;
     }
     const q = campusSearchQuery.toLowerCase();
-    return colleges.filter((c) => c.name.toLowerCase().includes(q)).sort((a, b) => b.count - a.count);
-  }, [metrics?.collegeMap, campusSearchQuery]);
+    return list.filter((c) => c.name.toLowerCase().includes(q));
+  }, [allProcessedCampuses, campusFilterTab, campusSearchQuery]);
 
   // Filtered Orders based on search & status filter
   const filteredOrders = useMemo(() => {
@@ -631,12 +663,12 @@ const AdminDashboard = () => {
                     <span>Top Active Campuses</span>
                   </h4>
                   <span className="text-xs text-white/50">
-                    {metrics ? `${metrics.collegesCovered} Active Colleges` : ""}
+                    {metrics ? `${metrics.collegesCovered} Verified Colleges` : ""}
                   </span>
                 </div>
 
                 <div className="space-y-3">
-                  {filteredCampuses.slice(0, 5).map((col, idx) => (
+                  {(allProcessedCampuses.verified || []).slice(0, 5).map((col, idx) => (
                     <div
                       key={col.name}
                       className="p-3 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between gap-3 text-xs"
@@ -654,12 +686,33 @@ const AdminDashboard = () => {
                       </span>
                     </div>
                   ))}
-                  {filteredCampuses.length === 0 && (
+                  {(allProcessedCampuses.verified || []).length === 0 && (
                     <p className="text-xs text-white/40 py-6 text-center">
-                      No active campuses onboarded in this state yet.
+                      No verified active campuses onboarded in this state yet.
                     </p>
                   )}
                 </div>
+
+                {/* Pending Verification Notice */}
+                {(allProcessedCampuses.pending || []).length > 0 && (
+                  <div className="mt-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-3 text-xs text-amber-200">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <FiAlertTriangle className="text-amber-400 shrink-0 text-sm" />
+                      <span className="truncate">
+                        <strong>{(allProcessedCampuses.pending || []).length} unverified campus submission(s)</strong> ({(allProcessedCampuses.pending || []).map(p => p.name).join(", ")})
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setActiveTab("campuses");
+                        setCampusFilterTab("pending");
+                      }}
+                      className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold rounded-xl text-[11px] shrink-0 cursor-pointer transition-all"
+                    >
+                      Moderate
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -992,16 +1045,16 @@ const AdminDashboard = () => {
           </section>
         )}
 
-        {/* Tab 4: College Directory */}
+        {/* Tab 4: College Directory & Campus Verification */}
         {activeTab === "campuses" && (
           <section className="space-y-4 text-left">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
                 <h3 className="font-serif font-bold text-xl text-white">
-                  Colleges & Campus Penetration
+                  Colleges & Campus Verification
                 </h3>
                 <p className="text-xs text-white/50">
-                  Directory of campus adoption across districts
+                  Directory of campus adoption with unverified submission moderation
                 </p>
               </div>
 
@@ -1018,25 +1071,105 @@ const AdminDashboard = () => {
               </div>
             </div>
 
+            {/* Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setCampusFilterTab("all")}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  campusFilterTab === "all"
+                    ? "bg-[#8C3F3F] text-white shadow"
+                    : "bg-white/5 hover:bg-white/10 text-white/70"
+                }`}
+              >
+                <span>All Campuses</span>
+                <span className="bg-black/30 px-2 py-0.5 rounded-full text-[10px]">
+                  {(allProcessedCampuses.all || []).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCampusFilterTab("verified")}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  campusFilterTab === "verified"
+                    ? "bg-[#8C3F3F] text-white shadow"
+                    : "bg-white/5 hover:bg-white/10 text-white/70"
+                }`}
+              >
+                <span>Verified Official Campuses</span>
+                <span className="bg-black/30 px-2 py-0.5 rounded-full text-[10px]">
+                  {(allProcessedCampuses.verified || []).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCampusFilterTab("pending")}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  campusFilterTab === "pending"
+                    ? "bg-amber-600 text-white shadow"
+                    : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-200"
+                }`}
+              >
+                <span>Needs Verification</span>
+                <span className="bg-amber-900/50 px-2 py-0.5 rounded-full text-[10px] text-amber-100 font-bold">
+                  {(allProcessedCampuses.pending || []).length}
+                </span>
+              </button>
+            </div>
+
             <div className="bg-[#1C0E11] border border-[#421A1E] rounded-3xl p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredCampuses.map((col) => (
                   <div
                     key={col.name}
-                    className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between gap-3 text-xs"
+                    className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 text-xs transition-all ${
+                      col.isVerified
+                        ? "bg-white/5 border-white/5"
+                        : "bg-amber-500/5 border-amber-500/30"
+                    }`}
                   >
                     <div className="overflow-hidden">
-                      <h5 className="font-bold text-white truncate">{col.name}</h5>
-                      <span className="text-[11px] text-[#E8AE68]/70">Campus Verified</span>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        {col.isVerified ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                            <FiCheckCircle className="text-[10px]" /> Verified Official
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/40">
+                            <FiAlertTriangle className="text-[10px]" /> Needs Verification
+                          </span>
+                        )}
+                        <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white font-mono font-bold text-[11px] shrink-0">
+                          {col.count} {col.count === 1 ? "Student" : "Students"}
+                        </span>
+                      </div>
+                      <h5 className="font-bold text-white text-sm leading-snug line-clamp-2">
+                        {col.name}
+                      </h5>
+                      <p className="text-[11px] text-white/50 mt-1 truncate">
+                        📍 {col.district && col.district !== "Not Specified" ? `${col.district}, ` : ""}{col.state || "Location Unassigned"}
+                      </p>
                     </div>
-                    <span className="px-3 py-1 rounded-full bg-white/10 text-white font-mono font-bold text-xs shrink-0">
-                      {col.count} Users
-                    </span>
+
+                    {!col.isVerified && (
+                      <div className="pt-2 border-t border-white/10 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCampusForModeration(col)}
+                          className="px-3.5 py-1.5 bg-[#8C3F3F] hover:bg-[#A34B4B] text-white font-bold rounded-xl text-[11px] transition-all flex items-center gap-1.5 shadow cursor-pointer"
+                        >
+                          <FiShield />
+                          <span>Moderate / Verify</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {filteredCampuses.length === 0 && (
                   <div className="col-span-full py-12 text-center text-white/40">
-                    No matching colleges found.
+                    No campuses found for the selected filter.
                   </div>
                 )}
               </div>
@@ -1320,6 +1453,14 @@ const AdminDashboard = () => {
           </div>
         )}
       </AnimatePresence>
+      {/* Campus Moderation & Verification Modal */}
+      <AdminVerifyCampusModal
+        isOpen={Boolean(selectedCampusForModeration)}
+        onClose={() => setSelectedCampusForModeration(null)}
+        campus={selectedCampusForModeration}
+        adminUid={admin?.uid}
+        onSuccess={loadDashboardData}
+      />
     </div>
   );
 };

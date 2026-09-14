@@ -16,6 +16,7 @@ import SelectRole from './pages/SelectRole';
 import TrackOrders from './pages/TrackOrders';
 import Profile from './pages/Profile';
 import CollegeOnboardingModal from './components/CollegeOnboardingModal';
+import { isCollegeVerified } from './utils/collegeVerification';
 import AdminLogin from './pages/Admin/AdminLogin';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import { Toaster } from 'react-hot-toast';
@@ -48,7 +49,8 @@ const App = () => {
   // Determine if onboarding modal should be shown (strictly for student accounts)
   const isAuthPage = ['/home', '/login', '/register', '/forgot-password', '/reset-password', '/admin/login', '/admin', '/'].includes(location.pathname);
   const isStudent = currentUser && ['hosteler', 'dayscholar'].includes(currentUser.role);
-  const needsCollegeOnboarding = isStudent && (!currentUser.collegeName || !currentUser.collegeName.trim() || !currentUser.isPhoneVerified) && !isAuthPage;
+  const isCollegeValid = currentUser?.collegeName && isCollegeVerified(currentUser.collegeName);
+  const needsCollegeOnboarding = isStudent && (!isCollegeValid || !currentUser.isPhoneVerified) && !isAuthPage;
 
   return (
     <>

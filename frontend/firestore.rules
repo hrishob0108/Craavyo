@@ -127,6 +127,14 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ===============================================================
+    // 9. VERIFIED CAMPUSES DIRECTORY (/verifiedCampuses)
+    // ===============================================================
+    match /verifiedCampuses/{campusId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;

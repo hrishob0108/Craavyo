@@ -15,7 +15,7 @@ import {
   onSnapshot 
 } from "firebase/firestore";
 import { db, auth, firebaseConfig } from "../firebase";
-import { isCollegeVerified, getCollegeDetails } from "../utils/collegeVerification";
+import { isCollegeVerified, getCollegeDetails, getCanonicalCollegeName } from "../utils/collegeVerification";
 
 // ==========================================
 // ADMIN & EXECUTIVE GOVERNANCE SERVICE
@@ -366,9 +366,21 @@ export const getAllUsersForAdmin = async (filterState = "ALL") => {
     getDocs(collection(db, "dayscholars"))
   ]);
 
+  const sanitizeCollege = (u) => {
+    const name = (u.collegeName || "").trim();
+    const isVerified = name && name !== "College Not Selected" && isCollegeVerified(name) && Boolean(u.isPhoneVerified);
+    return isVerified ? (getCanonicalCollegeName(name) || name) : "College Not Selected";
+  };
+
   const users = [
-    ...hostelersSnap.docs.map(d => ({ _id: d.id, id: d.id, ...d.data(), role: d.data().role || "hosteler" })),
-    ...dayscholarsSnap.docs.map(d => ({ _id: d.id, id: d.id, ...d.data(), role: d.data().role || "dayscholar" }))
+    ...hostelersSnap.docs.map(d => {
+      const data = d.data();
+      return { _id: d.id, id: d.id, ...data, role: data.role || "hosteler", collegeName: sanitizeCollege(data) };
+    }),
+    ...dayscholarsSnap.docs.map(d => {
+      const data = d.data();
+      return { _id: d.id, id: d.id, ...data, role: data.role || "dayscholar", collegeName: sanitizeCollege(data) };
+    })
   ];
 
   let filtered = users;
@@ -429,28 +441,40 @@ export const getAdminMetrics = async (filterState = "ALL") => {
 
   const verifiedProofsCount = orders.filter(o => o.cookingProofImageUrl || o.handoverProofImageUrl).length;
 
-  // College breakdowns: strictly partition into verified vs pending review
+  // College breakdowns: strictly count officially verified campuses
   const verifiedCollegeMap = {};
-  const pendingCollegeMap = {};
   const campusDetailsMap = {};
+  let unassignedStudentsCount = 0;
+  const purgeUpdates = [];
 
   users.forEach(u => {
     const name = (u.collegeName || "").trim();
-    if (!name) return;
-
-    const isVerified = isCollegeVerified(name, customVerifiedCampuses);
-    const details = getCollegeDetails(name) ||
-      customVerifiedCampuses.find(c => (c.name || "").toLowerCase() === name.toLowerCase()) ||
-      { college: name, state: u.state || "Not Specified", district: u.district || "Not Specified" };
-
-    campusDetailsMap[name] = details;
+    const isVerified = name && name !== "College Not Selected" && isCollegeVerified(name, customVerifiedCampuses) && Boolean(u.isPhoneVerified);
 
     if (isVerified) {
-      verifiedCollegeMap[name] = (verifiedCollegeMap[name] || 0) + 1;
+      const canonical = getCanonicalCollegeName(name) || name;
+      verifiedCollegeMap[canonical] = (verifiedCollegeMap[canonical] || 0) + 1;
+      if (!campusDetailsMap[canonical]) {
+        campusDetailsMap[canonical] = getCollegeDetails(canonical) ||
+          customVerifiedCampuses.find(c => (c.name || "").toLowerCase() === canonical.toLowerCase()) ||
+          { college: canonical, state: u.state || "Not Specified", district: u.district || "Not Specified" };
+      }
     } else {
-      pendingCollegeMap[name] = (pendingCollegeMap[name] || 0) + 1;
+      unassignedStudentsCount++;
+      // Auto-purge unverified college names from Firestore
+      if (name && name !== "College Not Selected") {
+        const col = u.role === "hosteler" ? "hostelers" : "dayscholars";
+        purgeUpdates.push(
+          setDoc(doc(db, col, u._id), { collegeName: "College Not Selected", updatedAt: serverTimestamp() }, { merge: true })
+        );
+      }
     }
   });
+
+  // Execute silent Firestore cleanup of unverified names
+  if (purgeUpdates.length > 0) {
+    Promise.all(purgeUpdates).catch(err => console.warn("[Craavyo Purge Error]", err));
+  }
 
   return {
     totalOrders,
@@ -468,8 +492,7 @@ export const getAdminMetrics = async (filterState = "ALL") => {
     collegesCovered: Object.keys(verifiedCollegeMap).length,
     collegeMap: verifiedCollegeMap, // Leaderboard will only display verified campuses
     verifiedCollegeMap,
-    pendingCollegeMap,
-    pendingCampusesCount: Object.keys(pendingCollegeMap).length,
+    unassignedStudentsCount, // students whose college is "College Not Selected"
     campusDetailsMap,
     customVerifiedCampuses
   };

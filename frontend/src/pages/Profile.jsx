@@ -9,6 +9,7 @@ const Profile = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showCollegeModal, setShowCollegeModal] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',

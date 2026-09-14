@@ -15,6 +15,7 @@ import {
   onSnapshot 
 } from "firebase/firestore";
 import { db, auth, firebaseConfig } from "../firebase";
+import { isCollegeVerified, getCollegeDetails } from "../utils/collegeVerification";
 
 // ==========================================
 // ADMIN & EXECUTIVE GOVERNANCE SERVICE
@@ -381,17 +382,19 @@ export const getAllUsersForAdmin = async (filterState = "ALL") => {
  * Calculate executive platform KPI metrics across partitions
  */
 export const getAdminMetrics = async (filterState = "ALL") => {
-  const [ordersSnap, mealsSnap, hostelersSnap, dayscholarsSnap, reviewsSnap] = await Promise.all([
+  const [ordersSnap, mealsSnap, hostelersSnap, dayscholarsSnap, reviewsSnap, verifiedCampusesSnap] = await Promise.all([
     getDocs(collection(db, "orders")),
     getDocs(collection(db, "meals")),
     getDocs(collection(db, "hostelers")),
     getDocs(collection(db, "dayscholars")),
-    getDocs(collection(db, "reviews"))
+    getDocs(collection(db, "reviews")),
+    getDocs(collection(db, "verifiedCampuses")).catch(() => ({ docs: [] }))
   ]);
 
   let orders = ordersSnap.docs.map(d => ({ _id: d.id, ...d.data() }));
   let meals = mealsSnap.docs.map(d => ({ _id: d.id, ...d.data() }));
   let reviews = reviewsSnap.docs.map(d => ({ _id: d.id, ...d.data() }));
+  const customVerifiedCampuses = (verifiedCampusesSnap.docs || []).map(d => ({ _id: d.id, ...d.data() }));
 
   const usersMap = new Map();
   hostelersSnap.docs.forEach(d => usersMap.set(d.id, { _id: d.id, ...d.data(), role: d.data().role || "hosteler" }));
@@ -426,11 +429,26 @@ export const getAdminMetrics = async (filterState = "ALL") => {
 
   const verifiedProofsCount = orders.filter(o => o.cookingProofImageUrl || o.handoverProofImageUrl).length;
 
-  // College breakdowns & leaderboard
-  const collegeMap = {};
+  // College breakdowns: strictly partition into verified vs pending review
+  const verifiedCollegeMap = {};
+  const pendingCollegeMap = {};
+  const campusDetailsMap = {};
+
   users.forEach(u => {
-    if (u.collegeName) {
-      collegeMap[u.collegeName] = (collegeMap[u.collegeName] || 0) + 1;
+    const name = (u.collegeName || "").trim();
+    if (!name) return;
+
+    const isVerified = isCollegeVerified(name, customVerifiedCampuses);
+    const details = getCollegeDetails(name) ||
+      customVerifiedCampuses.find(c => (c.name || "").toLowerCase() === name.toLowerCase()) ||
+      { college: name, state: u.state || "Not Specified", district: u.district || "Not Specified" };
+
+    campusDetailsMap[name] = details;
+
+    if (isVerified) {
+      verifiedCollegeMap[name] = (verifiedCollegeMap[name] || 0) + 1;
+    } else {
+      pendingCollegeMap[name] = (pendingCollegeMap[name] || 0) + 1;
     }
   });
 
@@ -446,9 +464,100 @@ export const getAdminMetrics = async (filterState = "ALL") => {
     avgRating,
     totalReviews,
     verifiedProofsCount,
-    collegesCovered: Object.keys(collegeMap).length,
-    collegeMap
+    // Only officially verified campuses count towards active network reach!
+    collegesCovered: Object.keys(verifiedCollegeMap).length,
+    collegeMap: verifiedCollegeMap, // Leaderboard will only display verified campuses
+    verifiedCollegeMap,
+    pendingCollegeMap,
+    pendingCampusesCount: Object.keys(pendingCollegeMap).length,
+    campusDetailsMap,
+    customVerifiedCampuses
   };
+};
+
+/**
+ * Fetch all admin-approved custom verified campuses
+ */
+export const getCustomVerifiedCampuses = async () => {
+  try {
+    const snap = await getDocs(collection(db, "verifiedCampuses"));
+    return snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn("Failed to fetch verifiedCampuses:", err);
+    return [];
+  }
+};
+
+/**
+ * Verify and approve a custom campus name so it is recognized network-wide as verified
+ */
+export const verifyCustomCampus = async (campusName, state, district, adminUid) => {
+  const cleanName = campusName.trim();
+  const campusDocRef = doc(collection(db, "verifiedCampuses"));
+  const payload = {
+    name: cleanName,
+    state: state.trim(),
+    district: district.trim(),
+    verifiedBy: adminUid,
+    status: "verified",
+    verifiedAt: serverTimestamp(),
+  };
+  await setDoc(campusDocRef, payload);
+  await logAdminAudit(adminUid, "VERIFY_CAMPUS", `Approved and verified campus "${cleanName}" in ${state}, ${district}.`);
+  return { _id: campusDocRef.id, ...payload };
+};
+
+/**
+ * Reassign all students from an unverified campus name to an official verified college
+ */
+export const reassignCampusStudents = async (oldCampusName, newOfficialCollegeName, state, district, adminUid) => {
+  const cleanOld = oldCampusName.trim().toLowerCase();
+  const cleanNew = newOfficialCollegeName.trim();
+
+  const [hostelersSnap, dayscholarsSnap] = await Promise.all([
+    getDocs(collection(db, "hostelers")),
+    getDocs(collection(db, "dayscholars")),
+  ]);
+
+  const updates = [];
+
+  hostelersSnap.docs.forEach((d) => {
+    const data = d.data();
+    if ((data.collegeName || "").trim().toLowerCase() === cleanOld) {
+      updates.push(
+        setDoc(doc(db, "hostelers", d.id), {
+          collegeName: cleanNew,
+          state: state || data.state,
+          district: district || data.district,
+          updatedAt: serverTimestamp(),
+        }, { merge: true })
+      );
+    }
+  });
+
+  dayscholarsSnap.docs.forEach((d) => {
+    const data = d.data();
+    if ((data.collegeName || "").trim().toLowerCase() === cleanOld) {
+      updates.push(
+        setDoc(doc(db, "dayscholars", d.id), {
+          collegeName: cleanNew,
+          state: state || data.state,
+          district: district || data.district,
+          updatedAt: serverTimestamp(),
+        }, { merge: true })
+      );
+    }
+  });
+
+  await Promise.all(updates);
+
+  await logAdminAudit(
+    adminUid,
+    "REASSIGN_CAMPUS",
+    `Reassigned ${updates.length} students from unverified campus "${oldCampusName}" to official verified college "${cleanNew}".`
+  );
+
+  return updates.length;
 };
 
 /**

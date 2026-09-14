@@ -73,7 +73,7 @@ const Register = () => {
           email: formData.email.trim(),
           role: formData.role,
           phone: formData.phone || "",
-          collegeName: formData.collegeName || "",
+          collegeName: "",
           isPhoneVerified: false,
           state: "",
           district: "",
@@ -230,23 +230,7 @@ const Register = () => {
             )}
           </div>
 
-          {/* College Name Field */}
-          <div>
-            <label className="block text-white font-serif text-sm font-normal mb-1 text-left">
-              College Name
-            </label>
-            <div className="relative flex items-center">
-              <FaGraduationCap className="absolute left-3.5 text-white/70 text-sm pointer-events-none" />
-              <input
-                type="text"
-                name="collegeName"
-                placeholder="Enter Your College Name"
-                value={formData.collegeName}
-                onChange={handleChange}
-                className="w-full pl-10 pr-4 py-2.5 bg-white/10 backdrop-blur-md text-white placeholder-white/60 rounded-[14px] border border-white/35 focus:border-white focus:outline-none focus:ring-1 focus:ring-white/50 transition-all text-xs sm:text-sm font-medium"
-              />
-            </div>
-          </div>
+
 
           {/* Email Field */}
           <div>

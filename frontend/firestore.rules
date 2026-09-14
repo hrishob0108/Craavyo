@@ -6,24 +6,16 @@ service cloud.firestore {
     // CORE SECURITY FUNCTIONS & RBAC ENFORCEMENT
     // ===============================================================
 
-    // Check if the caller is authenticated with Firebase Auth
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Check if the caller matches the document owner UID
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // Check if the caller is an active administrator in the admins collection
     function isAdmin() {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == 'active';
     }
 
-    // Check if the caller is a top-level Founder
     function isFounder() {
       return isAdmin() && (
         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'founder' ||
@@ -45,16 +37,12 @@ service cloud.firestore {
     // ===============================================================
     match /hostelers/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
     match /dayscholars/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
     // ===============================================================
@@ -66,10 +54,7 @@ service cloud.firestore {
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.price is number &&
         request.resource.data.price >= 20;
-      allow update: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid || isAdmin()
-      );
-      allow delete: if isAuthenticated() && (
+      allow update, delete: if isAuthenticated() && (
         resource.data.createdBy == request.auth.uid || isAdmin()
       );
     }
@@ -93,11 +78,7 @@ service cloud.firestore {
     // 5. ORDERS & DELIVERY LIFECYCLE (/orders)
     // ===============================================================
     match /orders/{orderId} {
-      allow read: if isAuthenticated() && (
-        resource.data.buyerId == request.auth.uid ||
-        resource.data.sellerId == request.auth.uid ||
-        isAdmin()
-      );
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() &&
         request.resource.data.buyerId == request.auth.uid &&
         request.resource.data.price is number &&
@@ -138,7 +119,7 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Default deny all other paths
+    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }

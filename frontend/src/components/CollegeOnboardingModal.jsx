@@ -223,7 +223,7 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
     setErrorMsg("");
 
     try {
-      const uid = user?._id || user?.uid || auth.currentUser?.uid;
+      const uid = auth.currentUser?.uid || user?.uid || user?._id;
       if (!uid) {
         setErrorMsg("User session not found. Please log in again.");
         return;
@@ -233,8 +233,11 @@ const CollegeOnboardingModal = ({ user, onCollegeSelected }) => {
         state: selectedState,
         district: selectedDistrict,
         collegeName: selectedCollege,
-        phone: phone.trim(),
+        phone: phone.replace(/\D/g, "").slice(-10),
         isPhoneVerified: true,
+        role: user?.role || "dayscholar",
+        name: user?.name || auth.currentUser?.displayName || "Student",
+        email: user?.email || auth.currentUser?.email || ""
       });
       
       // Update sessionStorage

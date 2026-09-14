@@ -109,13 +109,14 @@ export const updateUserProfile = async (uid, updateData) => {
 /**
  * Complete mandatory college onboarding and update phone verification
  */
-export const saveCollegeOnboarding = async (uid, { state, district, collegeName, phone, isPhoneVerified }) => {
+export const saveCollegeOnboarding = async (uid, { state, district, collegeName, phone, isPhoneVerified, role }) => {
   const payload = {
     state: state.trim(),
     district: district.trim(),
     collegeName: collegeName.trim(),
     updatedAt: serverTimestamp(),
   };
+  if (role) payload.role = role;
   if (phone) payload.phone = phone.trim();
   if (isPhoneVerified !== undefined) payload.isPhoneVerified = isPhoneVerified;
 
